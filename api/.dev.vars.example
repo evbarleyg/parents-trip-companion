@@ -1,5 +1,5 @@
 JWT_SECRET=replace-me
-# Optional; if omitted, fallback passcode is "parents2026"
+# Optional; if omitted, fallback passcode is "SusanJim2026"
 PASSCODE_HASH=replace-with-sha256-hex
 ALLOWED_ORIGIN=http://localhost:5173
 GOOGLE_PLACES_API_KEY=

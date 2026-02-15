@@ -7,7 +7,7 @@ import type {
 } from '../types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
-const FALLBACK_PASSCODE = 'parents2026';
+const FALLBACK_PASSCODE = 'SusanJim2026';
 
 function fallbackRecommendations(
   lat: number,

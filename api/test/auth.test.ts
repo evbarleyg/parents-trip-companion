@@ -41,4 +41,18 @@ describe('auth utilities', () => {
 
     await expect(verifyToken(expired, secret)).rejects.toBeTruthy();
   });
+
+  it('supports fallback dev passcode when PASSCODE_HASH is empty', async () => {
+    const valid = await verifyPasscode('SusanJim2026', {
+      JWT_SECRET: 's',
+      PASSCODE_HASH: '',
+    });
+    const invalid = await verifyPasscode('parents2026', {
+      JWT_SECRET: 's',
+      PASSCODE_HASH: '',
+    });
+
+    expect(valid).toBe(true);
+    expect(invalid).toBe(false);
+  });
 });

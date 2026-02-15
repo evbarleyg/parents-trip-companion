@@ -1,6 +1,9 @@
 export type RecCategory = 'sights' | 'food' | 'coffee' | 'rest';
 
 export type ViewMode = 'summary' | 'detail';
+export type AppViewTab = 'trip_overview' | 'day_detail';
+export type MobilePanel = 'now' | 'map' | 'plan' | 'recs';
+export type MapStatus = 'initializing' | 'ready' | 'error';
 
 export interface ItineraryItem {
   id: string;

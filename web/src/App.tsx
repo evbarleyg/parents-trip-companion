@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import {
   askRecommendationChat,
@@ -13,17 +13,24 @@ import { detectWhereAmI } from './lib/location';
 import { applyTripPatch } from './lib/merge';
 import {
   clearSession,
+  loadAppViewTab,
   loadDayViewModes,
+  loadMobilePanel,
   loadSession,
   loadTripPlanState,
+  saveAppViewTab,
   saveDayViewModes,
+  saveMobilePanel,
   saveSession,
   saveSourceDocument,
   saveTripPlanState,
 } from './lib/storage';
 import { getCurrentAndNext } from './lib/time';
 import type {
+  AppViewTab,
   ChatContext,
+  MapStatus,
+  MobilePanel,
   RecommendationItem,
   RecCategory,
   SourceDocument,
@@ -35,12 +42,34 @@ import type {
 } from './types';
 
 const GEO_REFRESH_MS = 5 * 60 * 1000;
+const MOBILE_BREAKPOINT = 980;
+
 const CATEGORY_LABEL: Record<RecCategory, string> = {
   sights: 'Sights',
   food: 'Food',
   coffee: 'Coffee',
   rest: 'Rest',
 };
+
+const APP_TAB_LABEL: Record<AppViewTab, string> = {
+  trip_overview: 'Trip Overview',
+  day_detail: 'Day Detail',
+};
+
+const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
+  now: 'Now',
+  map: 'Map',
+  plan: 'Plan',
+  recs: 'Recs',
+};
+
+interface RegionSegment {
+  id: string;
+  region: string;
+  startDate: string;
+  endDate: string;
+  days: number;
+}
 
 function regionColor(region: string): string {
   const key = region.toLowerCase();
@@ -86,6 +115,40 @@ function defaultWhereAmI(date: string): WhereAmIState {
   };
 }
 
+function buildRegionSegments(days: TripDay[]): RegionSegment[] {
+  if (days.length === 0) return [];
+
+  const segments: RegionSegment[] = [];
+  let cursor: RegionSegment = {
+    id: `${days[0].region}-${days[0].date}`,
+    region: days[0].region,
+    startDate: days[0].date,
+    endDate: days[0].date,
+    days: 1,
+  };
+
+  for (let i = 1; i < days.length; i += 1) {
+    const next = days[i];
+    if (next.region === cursor.region) {
+      cursor.endDate = next.date;
+      cursor.days += 1;
+      continue;
+    }
+
+    segments.push(cursor);
+    cursor = {
+      id: `${next.region}-${next.date}`,
+      region: next.region,
+      startDate: next.date,
+      endDate: next.date,
+      days: 1,
+    };
+  }
+
+  segments.push(cursor);
+  return segments;
+}
+
 export function App() {
   const [passcode, setPasscode] = useState('');
   const [session, setSession] = useState(loadSession());
@@ -104,6 +167,17 @@ export function App() {
   const [autoLocateEnabled, setAutoLocateEnabled] = useState(false);
   const [manualDayId, setManualDayId] = useState<string>('');
   const [manualItemId, setManualItemId] = useState<string>('');
+
+  const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(() => loadAppViewTab());
+  const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
+  });
+
+  const [mapStatus, setMapStatus] = useState<MapStatus>('initializing');
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [mapMountVersion, setMapMountVersion] = useState(0);
 
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
@@ -129,6 +203,7 @@ export function App() {
   const mapRef = useRef<L.Map | null>(null);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   const selectedDay = useMemo(
     () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
@@ -136,37 +211,163 @@ export function App() {
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
   const nowAndNext = useMemo(() => getCurrentAndNext(selectedItems), [selectedItems]);
+  const regionSegments = useMemo(() => buildRegionSegments(tripPlan.days), [tripPlan.days]);
 
   const whereAmIItem = useMemo(() => {
     if (!whereAmI.activeItemId || !selectedDay) return null;
     return getActiveItems(selectedDay).find((item) => item.id === whereAmI.activeItemId) || null;
   }, [selectedDay, whereAmI.activeItemId]);
 
+  const manualDay = useMemo(() => tripPlan.days.find((day) => day.date === manualDayId), [tripPlan.days, manualDayId]);
+  const itemOptionsForManual = manualDay ? [...manualDay.summaryItems, ...manualDay.detailItems] : [];
+
+  const invalidateMap = useCallback(() => {
+    if (!mapRef.current) return;
+    window.requestAnimationFrame(() => {
+      try {
+        mapRef.current?.invalidateSize({ pan: false, animate: false });
+      } catch {
+        // Ignore transient invalidate errors.
+      }
+    });
+  }, []);
+
+  function setAppTab(tab: AppViewTab) {
+    setActiveAppTabState(tab);
+    saveAppViewTab(tab);
+  }
+
+  function setMobilePanel(panel: MobilePanel) {
+    setActiveMobilePanelState(panel);
+    saveMobilePanel(panel);
+  }
+
+  function retryMapInit() {
+    setMapError(null);
+    setMapStatus('initializing');
+    setMapMountVersion((prev) => prev + 1);
+  }
+
+  function panelHiddenClass(panel: MobilePanel): string {
+    if (!isMobile || activeAppTab !== 'day_detail') return '';
+    return activeMobilePanel === panel ? '' : 'panel-hidden-mobile';
+  }
+
   useEffect(() => {
     saveTripPlanState(tripPlan);
   }, [tripPlan]);
 
   useEffect(() => {
-    if (!mapElementRef.current || mapRef.current) return;
+    if (typeof window === 'undefined') return;
 
-    const map = L.map(mapElementRef.current, { zoomControl: true }).setView([26, 20], 3);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
-    }).addTo(map);
+    const media = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    const apply = () => setIsMobile(media.matches);
+    apply();
 
-    const markerLayer = L.layerGroup().addTo(map);
-    mapRef.current = map;
-    markerLayerRef.current = markerLayer;
-
+    media.addEventListener('change', apply);
     return () => {
-      map.remove();
-      mapRef.current = null;
-      markerLayerRef.current = null;
+      media.removeEventListener('change', apply);
     };
   }, []);
 
   useEffect(() => {
-    if (!mapRef.current || !markerLayerRef.current) return;
+    const container = mapElementRef.current;
+    if (!container) {
+      setMapStatus('error');
+      setMapError('Map container is unavailable.');
+      return;
+    }
+
+    let cancelled = false;
+    let rafId = 0;
+    let settleRafId = 0;
+
+    setMapStatus('initializing');
+    setMapError(null);
+
+    rafId = window.requestAnimationFrame(() => {
+      if (cancelled) return;
+
+      try {
+        const map = L.map(container, {
+          zoomControl: true,
+          preferCanvas: true,
+        }).setView([26, 20], 3);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+        }).addTo(map);
+
+        const markerLayer = L.layerGroup().addTo(map);
+        mapRef.current = map;
+        markerLayerRef.current = markerLayer;
+
+        settleRafId = window.requestAnimationFrame(() => {
+          if (cancelled) return;
+          invalidateMap();
+          setMapStatus('ready');
+        });
+      } catch (error) {
+        setMapStatus('error');
+        setMapError((error as Error).message || 'Unable to initialize map.');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(rafId);
+      window.cancelAnimationFrame(settleRafId);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+
+      if (mapRef.current) {
+        mapRef.current.remove();
+      }
+
+      mapRef.current = null;
+      markerLayerRef.current = null;
+    };
+  }, [mapMountVersion, invalidateMap]);
+
+  useEffect(() => {
+    if (mapStatus !== 'ready') return;
+
+    const onResize = () => invalidateMap();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        invalidateMap();
+      }
+    };
+
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    if (typeof ResizeObserver !== 'undefined' && mapElementRef.current) {
+      const observer = new ResizeObserver(() => invalidateMap());
+      observer.observe(mapElementRef.current);
+      resizeObserverRef.current = observer;
+    }
+
+    invalidateMap();
+
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      document.removeEventListener('visibilitychange', onVisibility);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+    };
+  }, [mapStatus, invalidateMap]);
+
+  useEffect(() => {
+    if (mapStatus === 'ready') {
+      invalidateMap();
+    }
+  }, [activeAppTab, activeMobilePanel, isMobile, mapStatus, invalidateMap]);
+
+  useEffect(() => {
+    if (mapStatus !== 'ready' || !mapRef.current || !markerLayerRef.current) return;
 
     markerLayerRef.current.clearLayers();
 
@@ -175,13 +376,13 @@ export function App() {
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
       const color = regionColor(day.region);
+      const isSelectedDate = day.date === selectedDate;
 
       const coords = items
         .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
         .map((item) => [item.lat as number, item.lng as number] as [number, number]);
 
       coords.forEach((coord, idx) => {
-        const isSelectedDate = day.date === selectedDate;
         const marker = L.circleMarker(coord, {
           radius: isSelectedDate ? 6 : 4,
           color: '#ffffff',
@@ -196,19 +397,34 @@ export function App() {
 
         marker.on('click', () => {
           setSelectedDate(day.date);
+          setAppTab('day_detail');
+          if (isMobile) {
+            setMobilePanel('plan');
+          }
         });
 
         markerLayerRef.current?.addLayer(marker);
         bounds.extend(coord);
       });
 
-      if (day.date === selectedDate && coords.length >= 2) {
-        const line = L.polyline(coords, {
-          color,
-          weight: 3,
-          opacity: 0.8,
-        });
-        markerLayerRef.current.addLayer(line);
+      if (coords.length >= 2) {
+        if (activeAppTab === 'trip_overview') {
+          markerLayerRef.current.addLayer(
+            L.polyline(coords, {
+              color,
+              weight: isSelectedDate ? 3.2 : 2,
+              opacity: isSelectedDate ? 0.9 : 0.33,
+            }),
+          );
+        } else if (isSelectedDate) {
+          markerLayerRef.current.addLayer(
+            L.polyline(coords, {
+              color,
+              weight: 3,
+              opacity: 0.82,
+            }),
+          );
+        }
       }
     }
 
@@ -226,9 +442,11 @@ export function App() {
     }
 
     if (bounds.isValid()) {
-      mapRef.current.fitBounds(bounds.pad(0.2));
+      mapRef.current.fitBounds(bounds.pad(activeAppTab === 'trip_overview' ? 0.24 : 0.2));
     }
-  }, [tripPlan, selectedDate, whereAmI.currentLatLng]);
+
+    invalidateMap();
+  }, [tripPlan, selectedDate, whereAmI.currentLatLng, activeAppTab, isMobile, mapStatus, invalidateMap]);
 
   useEffect(() => {
     const next = detectWhereAmI(tripPlan, selectedDate, whereAmI.currentLatLng, whereAmI.mode);
@@ -256,10 +474,10 @@ export function App() {
         (position) => {
           if (cancelled) return;
           const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
-          setWhereAmI((prev) => ({
+          setWhereAmI({
             ...detectWhereAmI(tripPlan, selectedDate, coords, 'auto'),
             mode: 'auto',
-          }));
+          });
         },
         (error) => {
           if (cancelled) return;
@@ -529,9 +747,6 @@ export function App() {
     );
   }
 
-  const manualDay = tripPlan.days.find((day) => day.date === manualDayId);
-  const itemOptionsForManual = manualDay ? [...manualDay.summaryItems, ...manualDay.detailItems] : [];
-
   return (
     <main className="layout">
       <header className="topbar">
@@ -549,199 +764,320 @@ export function App() {
         </div>
       </header>
 
-      <section className="dashboard-grid">
-        <article className="card">
-          <h2>Today</h2>
-          <div className="row">
-            <label htmlFor="day-select">Date</label>
-            <select id="day-select" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
-              {tripPlan.days.map((day) => (
-                <option key={day.date} value={day.date}>
-                  {formatDateLabel(day.date)} - {day.region}
-                </option>
-              ))}
-            </select>
-          </div>
+      <nav className="app-tab-strip" aria-label="Primary view tabs">
+        {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={`app-tab ${activeAppTab === tab ? 'active' : ''}`}
+            onClick={() => setAppTab(tab)}
+          >
+            {APP_TAB_LABEL[tab]}
+          </button>
+        ))}
+      </nav>
 
-          <div className="row">
-            <label htmlFor="region-select">Region jump</label>
-            <select
-              id="region-select"
-              value={selectedDay.region}
-              onChange={(event) => {
-                const next = tripPlan.days.find((day) => day.region === event.target.value);
-                if (next) setSelectedDate(next.date);
-              }}
-            >
-              {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
-                <option key={region} value={region}>
-                  {region}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="pill-row">
-            <span className={`pill ${whereAmI.confidence}`}>Where am I: {whereAmI.confidence}</span>
-            <span className="pill">Mode: {whereAmI.mode}</span>
-          </div>
-
-          <h3>Now</h3>
-          <p>{nowAndNext.current ? `${nowAndNext.current.title} (${nowAndNext.current.location})` : 'No active block'}</p>
-          <h3>Next Up</h3>
-          <p>{nowAndNext.next ? `${nowAndNext.next.title} (${nowAndNext.next.startTime})` : 'No upcoming block'}</p>
-        </article>
-
-        <article className="card">
-          <h2>Day Timeline</h2>
-          <div className="toggle-row">
-            <button
-              className={selectedDay.activeView === 'detail' ? 'active' : ''}
-              disabled={selectedDay.detailItems.length === 0}
-              onClick={() => setDayViewMode(selectedDay.date, 'detail')}
-            >
-              Detailed
-            </button>
-            <button
-              className={selectedDay.activeView === 'summary' ? 'active' : ''}
-              onClick={() => setDayViewMode(selectedDay.date, 'summary')}
-            >
-              Summary
-            </button>
-          </div>
-          <ol className="timeline-list">
-            {selectedItems.map((item) => (
-              <li key={item.id} className={item.id === whereAmI.activeItemId ? 'is-current' : ''}>
-                <div className="time">{item.startTime}{item.endTime ? `-${item.endTime}` : '+'}</div>
-                <div className="body">
-                  <strong>{item.title}</strong>
-                  <p>{item.location}</p>
-                  <small>{item.notes}</small>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </article>
-
-        <article className="card">
-          <h2>Where Are They?</h2>
-          <p>Use manual override if GPS is denied or inaccurate.</p>
-          <div className="row">
-            <label htmlFor="manual-day">Day</label>
-            <select id="manual-day" value={manualDayId} onChange={(event) => setManualDayId(event.target.value)}>
-              <option value="">Select day</option>
-              {tripPlan.days.map((day) => (
-                <option key={day.date} value={day.date}>
-                  {formatDateLabel(day.date)} - {day.region}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="row">
-            <label htmlFor="manual-item">Stop/Item</label>
-            <select id="manual-item" value={manualItemId} onChange={(event) => setManualItemId(event.target.value)}>
-              <option value="">Auto choose</option>
-              {itemOptionsForManual.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.startTime} {item.title}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="button-row">
-            <button onClick={setManualOverride} disabled={!manualDayId}>
-              Apply Manual Override
-            </button>
-            <button onClick={clearManualOverride}>Use Auto Detection</button>
-          </div>
-        </article>
-
-        <article className="card">
-          <h2>Quick Recommendations</h2>
-          <div className="button-row">
-            {(['sights', 'food', 'coffee', 'rest'] as RecCategory[]).map((category) => (
-              <button
-                key={category}
-                className={activeCategory === category ? 'active' : ''}
-                onClick={() => fetchRecommendations(category)}
-                disabled={recommendationLoading}
+      {activeAppTab === 'trip_overview' ? (
+        <section className="trip-overview-grid">
+          <article className="card">
+            <h2>Trip Timeline</h2>
+            <p>Jump by date or region. The map shows the full trip path.</p>
+            <div className="row">
+              <label htmlFor="overview-day-select">Date jump</label>
+              <select
+                id="overview-day-select"
+                value={selectedDate}
+                onChange={(event) => setSelectedDate(event.target.value)}
               >
-                {CATEGORY_LABEL[category]}
-              </button>
-            ))}
-          </div>
-          {recommendationError ? <p className="error-text">{recommendationError}</p> : null}
-          <ul className="recommendation-list">
-            {recommendations.map((item) => (
-              <li key={item.placeId}>
-                <strong>{item.name}</strong>
-                <span>
-                  {item.distanceMeters}m | {item.rating ? `⭐ ${item.rating}` : 'No rating'} |{' '}
-                  {item.openNow === null ? 'Hours unknown' : item.openNow ? 'Open now' : 'Closed now'}
-                </span>
-                <a href={item.mapsUrl} target="_blank" rel="noreferrer">
-                  Open map
-                </a>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="card">
-          <h2>Ask Live Suggestions</h2>
-          <form onSubmit={submitChat} className="chat-form">
-            <textarea
-              value={chatQuestion}
-              onChange={(event) => setChatQuestion(event.target.value)}
-              placeholder="Ask: What should we see nearby for the next 2 hours?"
-              required
-            />
-            <button type="submit" disabled={chatLoading}>
-              {chatLoading ? 'Thinking...' : 'Ask'}
-            </button>
-          </form>
-          {chatError ? <p className="error-text">{chatError}</p> : null}
-          {chatAnswer ? <p className="chat-answer">{chatAnswer}</p> : null}
-        </article>
-
-        <article className="card">
-          <h2>Upload Detailed Itinerary</h2>
-          <p>Supported: PDF, DOCX, DOC, TXT. Review before save is required.</p>
-          <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleExtractUpload} disabled={extracting} />
-          {extracting ? <p>Parsing document...</p> : null}
-          {uploadError ? <p className="error-text">{uploadError}</p> : null}
-
-          {pendingPatch ? (
-            <div className="review-box">
-              <p>
-                <strong>{pendingPatch.fileName}</strong> ({pendingPatch.documentId})
-              </p>
-              <p>
-                Confidence: {Math.round(pendingPatch.patch.parseConfidence * 100)}% | Days added:{' '}
-                {pendingPatch.patch.daysAdded.length} | Days updated: {pendingPatch.patch.daysUpdated.length}
-              </p>
-              {pendingPatch.warnings.length > 0 ? (
-                <ul>
-                  {pendingPatch.warnings.map((warning) => (
-                    <li key={warning}>{warning}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <div className="button-row">
-                <button onClick={applyPendingPatch}>Apply Merge</button>
-                <button onClick={discardPendingPatch}>Discard</button>
-              </div>
+                {tripPlan.days.map((day) => (
+                  <option key={day.date} value={day.date}>
+                    {formatDateLabel(day.date)} - {day.region}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : null}
-        </article>
-      </section>
+            <div className="row">
+              <label htmlFor="overview-region-select">Region jump</label>
+              <select
+                id="overview-region-select"
+                value={selectedDay.region}
+                onChange={(event) => {
+                  const next = tripPlan.days.find((day) => day.region === event.target.value);
+                  if (next) setSelectedDate(next.date);
+                }}
+              >
+                {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
+                  <option key={region} value={region}>
+                    {region}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </article>
 
-      <section className="map-shell card">
+          <article className="card">
+            <h2>Region Legs</h2>
+            <ul className="region-overview-list">
+              {regionSegments.map((segment) => (
+                <li key={segment.id} className="region-row">
+                  <div>
+                    <strong>{segment.region}</strong>
+                    <p>
+                      {formatDateLabel(segment.startDate)} to {formatDateLabel(segment.endDate)} ({segment.days}{' '}
+                      {segment.days === 1 ? 'day' : 'days'})
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedDate(segment.startDate);
+                      setAppTab('day_detail');
+                      if (isMobile) setMobilePanel('plan');
+                    }}
+                  >
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </article>
+        </section>
+      ) : (
+        <>
+          {isMobile ? (
+            <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
+              {(['now', 'map', 'plan', 'recs'] as MobilePanel[]).map((panel) => (
+                <button
+                  key={panel}
+                  type="button"
+                  className={`mobile-panel-btn ${activeMobilePanel === panel ? 'active' : ''}`}
+                  onClick={() => setMobilePanel(panel)}
+                >
+                  {MOBILE_PANEL_LABEL[panel]}
+                </button>
+              ))}
+            </nav>
+          ) : null}
+
+          <section className="dashboard-grid">
+            <article className={`card ${panelHiddenClass('now')}`}>
+              <h2>Today</h2>
+              <div className="row">
+                <label htmlFor="day-select">Date</label>
+                <select id="day-select" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
+                  {tripPlan.days.map((day) => (
+                    <option key={day.date} value={day.date}>
+                      {formatDateLabel(day.date)} - {day.region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="row">
+                <label htmlFor="region-select">Region jump</label>
+                <select
+                  id="region-select"
+                  value={selectedDay.region}
+                  onChange={(event) => {
+                    const next = tripPlan.days.find((day) => day.region === event.target.value);
+                    if (next) setSelectedDate(next.date);
+                  }}
+                >
+                  {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pill-row">
+                <span className={`pill ${whereAmI.confidence}`}>Where am I: {whereAmI.confidence}</span>
+                <span className="pill">Mode: {whereAmI.mode}</span>
+              </div>
+
+              <h3>Now</h3>
+              <p>{nowAndNext.current ? `${nowAndNext.current.title} (${nowAndNext.current.location})` : 'No active block'}</p>
+              <h3>Next Up</h3>
+              <p>{nowAndNext.next ? `${nowAndNext.next.title} (${nowAndNext.next.startTime})` : 'No upcoming block'}</p>
+            </article>
+
+            <article className={`card ${panelHiddenClass('plan')}`}>
+              <h2>Day Timeline</h2>
+              <div className="toggle-row">
+                <button
+                  className={selectedDay.activeView === 'detail' ? 'active' : ''}
+                  disabled={selectedDay.detailItems.length === 0}
+                  onClick={() => setDayViewMode(selectedDay.date, 'detail')}
+                >
+                  Detailed Plan
+                </button>
+                <button
+                  className={selectedDay.activeView === 'summary' ? 'active' : ''}
+                  onClick={() => setDayViewMode(selectedDay.date, 'summary')}
+                >
+                  Trip Summary
+                </button>
+              </div>
+              <ol className="timeline-list">
+                {selectedItems.map((item) => (
+                  <li key={item.id} className={item.id === whereAmI.activeItemId ? 'is-current' : ''}>
+                    <div className="time">
+                      {item.startTime}
+                      {item.endTime ? `-${item.endTime}` : '+'}
+                    </div>
+                    <div className="body">
+                      <strong>{item.title}</strong>
+                      <p>{item.location}</p>
+                      <small>{item.notes}</small>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </article>
+
+            <article className={`card ${panelHiddenClass('now')}`}>
+              <h2>Where Are They?</h2>
+              <p>Use manual override if GPS is denied or inaccurate.</p>
+              <div className="row">
+                <label htmlFor="manual-day">Day</label>
+                <select id="manual-day" value={manualDayId} onChange={(event) => setManualDayId(event.target.value)}>
+                  <option value="">Select day</option>
+                  {tripPlan.days.map((day) => (
+                    <option key={day.date} value={day.date}>
+                      {formatDateLabel(day.date)} - {day.region}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="row">
+                <label htmlFor="manual-item">Stop/Item</label>
+                <select id="manual-item" value={manualItemId} onChange={(event) => setManualItemId(event.target.value)}>
+                  <option value="">Auto choose</option>
+                  {itemOptionsForManual.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.startTime} {item.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="button-row">
+                <button onClick={setManualOverride} disabled={!manualDayId}>
+                  Apply Manual Override
+                </button>
+                <button onClick={clearManualOverride}>Use Auto Detection</button>
+              </div>
+            </article>
+
+            <article className={`card ${panelHiddenClass('recs')}`}>
+              <h2>Quick Recommendations</h2>
+              <div className="button-row">
+                {(['sights', 'food', 'coffee', 'rest'] as RecCategory[]).map((category) => (
+                  <button
+                    key={category}
+                    className={activeCategory === category ? 'active' : ''}
+                    onClick={() => fetchRecommendations(category)}
+                    disabled={recommendationLoading}
+                  >
+                    {CATEGORY_LABEL[category]}
+                  </button>
+                ))}
+              </div>
+              {recommendationError ? <p className="error-text">{recommendationError}</p> : null}
+              <ul className="recommendation-list">
+                {recommendations.map((item) => (
+                  <li key={item.placeId}>
+                    <strong>{item.name}</strong>
+                    <span>
+                      {item.distanceMeters}m | {item.rating ? `⭐ ${item.rating}` : 'No rating'} |{' '}
+                      {item.openNow === null ? 'Hours unknown' : item.openNow ? 'Open now' : 'Closed now'}
+                    </span>
+                    <a href={item.mapsUrl} target="_blank" rel="noreferrer">
+                      Open map
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </article>
+
+            <article className={`card ${panelHiddenClass('recs')}`}>
+              <h2>Ask Live Suggestions</h2>
+              <form onSubmit={submitChat} className="chat-form">
+                <textarea
+                  value={chatQuestion}
+                  onChange={(event) => setChatQuestion(event.target.value)}
+                  placeholder="Ask: What should we see nearby for the next 2 hours?"
+                  required
+                />
+                <button type="submit" disabled={chatLoading}>
+                  {chatLoading ? 'Thinking...' : 'Ask'}
+                </button>
+              </form>
+              {chatError ? <p className="error-text">{chatError}</p> : null}
+              {chatAnswer ? <p className="chat-answer">{chatAnswer}</p> : null}
+            </article>
+
+            <article className={`card ${panelHiddenClass('plan')}`}>
+              <h2>Upload Detailed Itinerary</h2>
+              <p>Supported: PDF, DOCX, DOC, TXT. Review before save is required.</p>
+              <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleExtractUpload} disabled={extracting} />
+              {extracting ? <p>Parsing document...</p> : null}
+              {uploadError ? <p className="error-text">{uploadError}</p> : null}
+
+              {pendingPatch ? (
+                <div className="review-box">
+                  <p>
+                    <strong>{pendingPatch.fileName}</strong> ({pendingPatch.documentId})
+                  </p>
+                  <p>
+                    Confidence: {Math.round(pendingPatch.patch.parseConfidence * 100)}% | Days added:{' '}
+                    {pendingPatch.patch.daysAdded.length} | Days updated: {pendingPatch.patch.daysUpdated.length}
+                  </p>
+                  {pendingPatch.warnings.length > 0 ? (
+                    <ul>
+                      {pendingPatch.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <div className="button-row">
+                    <button onClick={applyPendingPatch}>Apply Merge</button>
+                    <button onClick={discardPendingPatch}>Discard</button>
+                  </div>
+                </div>
+              ) : null}
+            </article>
+          </section>
+        </>
+      )}
+
+      <section className={`map-shell card ${panelHiddenClass('map')}`}>
         <h2>Global Trip Map</h2>
-        <p>
-          All days are visible. Click markers to jump dates. Current date: <strong>{formatDateLabel(selectedDay.date)}</strong>
+        <p className="map-meta">
+          {activeAppTab === 'trip_overview'
+            ? 'Full-trip overview map. Click markers to open a specific day.'
+            : 'Day-focused map. Click markers to switch dates quickly.'}
         </p>
-        <div ref={mapElementRef} className="map" aria-label="Global trip map" />
+
+        <div className="map-status" role="status" aria-live="polite">
+          {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
+          {mapStatus === 'ready' ? <span>Map ready</span> : null}
+        </div>
+
+        {mapStatus === 'error' ? (
+          <div className="map-error">
+            <p>{mapError || 'Map failed to load.'}</p>
+            <button className="map-retry-btn" type="button" onClick={retryMapInit}>
+              Retry Map
+            </button>
+          </div>
+        ) : null}
+
+        <div
+          ref={mapElementRef}
+          className={`map ${mapStatus === 'error' ? 'is-disabled' : ''}`}
+          aria-label="Global trip map"
+        />
       </section>
 
       <footer className="status-row">
@@ -752,6 +1088,6 @@ export function App() {
   );
 }
 
-export function sourceDocumentIdFromName(fileName: string): string {
+export function sourceDocumentIdFromName(fileName: string) {
   return `${slugify(fileName)}-${Date.now()}`;
 }

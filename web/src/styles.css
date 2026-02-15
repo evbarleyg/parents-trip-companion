@@ -19,7 +19,7 @@ body,
   margin: 0;
   min-height: 100%;
   width: 100%;
-  font-family: "Avenir Next", "Segoe UI", Tahoma, sans-serif;
+  font-family: 'Avenir Next', 'Segoe UI', Tahoma, sans-serif;
   color: var(--text);
   background:
     radial-gradient(circle at 20% 0%, rgba(61, 99, 132, 0.12), transparent 45%),
@@ -83,8 +83,20 @@ body,
 .topbar-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
+.app-tab-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-tab {
+  min-height: 44px;
+}
+
+.trip-overview-grid,
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -129,7 +141,8 @@ textarea {
 button {
   border: 1px solid var(--accent);
   border-radius: 8px;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 8px 12px;
   background: var(--accent);
   color: #f7fafe;
   cursor: pointer;
@@ -241,7 +254,7 @@ button:disabled {
 }
 
 .chat-form textarea {
-  min-height: 80px;
+  min-height: 90px;
   resize: vertical;
 }
 
@@ -260,15 +273,86 @@ button:disabled {
   padding: 8px;
 }
 
+.region-overview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.region-row {
+  border: 1px solid #d4dce4;
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: #f8fbff;
+}
+
+.region-row p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .map-shell {
   overflow: hidden;
 }
 
+.map-meta {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+
+.map-status {
+  font-size: 0.84rem;
+  color: #35556e;
+  margin-bottom: 8px;
+}
+
+.map-error {
+  margin-bottom: 8px;
+  border: 1px solid #e1b4b4;
+  border-radius: 10px;
+  background: #fff3f3;
+  padding: 10px;
+}
+
+.map-error p {
+  margin: 0 0 8px;
+  color: var(--error);
+}
+
+.map-retry-btn {
+  width: fit-content;
+}
+
 .map {
   width: 100%;
-  min-height: 420px;
+  min-height: 460px;
+  max-height: 78vh;
   border-radius: 12px;
   overflow: hidden;
+}
+
+.map.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.mobile-panel-strip {
+  display: none;
+}
+
+.mobile-panel-btn {
+  min-height: 44px;
+}
+
+.panel-hidden-mobile {
+  display: block;
 }
 
 .status-row {
@@ -293,8 +377,8 @@ button:disabled {
 }
 
 @media (max-width: 980px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+  .layout {
+    padding: 10px;
   }
 
   .topbar {
@@ -303,12 +387,56 @@ button:disabled {
     gap: 10px;
   }
 
-  .status-row {
-    flex-direction: column;
-    gap: 4px;
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .app-tab-strip {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(236, 230, 217, 0.96);
+    padding-top: 2px;
+  }
+
+  .mobile-panel-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    position: sticky;
+    top: 52px;
+    z-index: 9;
+    background: rgba(236, 230, 217, 0.96);
+    padding: 4px 0;
+  }
+
+  .trip-overview-grid,
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
 
   .timeline-list li {
     grid-template-columns: 1fr;
+  }
+
+  .region-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .panel-hidden-mobile {
+    display: none !important;
+  }
+
+  .map {
+    min-height: clamp(260px, 52vh, 420px);
+    max-height: 65vh;
+  }
+
+  .status-row {
+    flex-direction: column;
+    gap: 4px;
   }
 }

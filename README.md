@@ -38,11 +38,11 @@ npm run build
 
 ### Web (`web/.env`)
 
-- `VITE_API_BASE_URL` (default `http://127.0.0.1:8787`)
+- `VITE_API_BASE_URL` (optional; when omitted app uses frontend fallback mode)
 - `VITE_BASE_PATH` (set to `/parents-trip-companion/` for GitHub Pages)
 
 If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
-- unlock still works with passcode `parents2026`
+- unlock still works with passcode `SusanJim2026`
 - recommendations/chat use local fallback responses
 - document extraction requires backend API
 
@@ -57,7 +57,7 @@ If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
 
 Default fallback passcode (if `PASSCODE_HASH` is not set) is:
 
-- `parents2026`
+- `SusanJim2026`
 
 To generate passcode hash quickly in Node:
 

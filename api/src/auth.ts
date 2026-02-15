@@ -2,7 +2,7 @@ import { sign, verify } from 'hono/jwt';
 import type { AuthPayload, EnvBindings } from './types';
 
 const TOKEN_TTL_SECONDS = 12 * 60 * 60;
-const DEFAULT_DEV_PASSCODE_HASH = 'e2aeef58cb56bd1e739c8fd4d9454cb701b2ee5feaf745a9f9533921f06709c9';
+const DEFAULT_DEV_PASSCODE_HASH = 'c7518df5723d1ea11e6ca7b8e18e3c2d0165d9335c59a61dcefc1d3741748a62';
 
 function toHex(buffer: ArrayBuffer): string {
   return [...new Uint8Array(buffer)].map((part) => part.toString(16).padStart(2, '0')).join('');

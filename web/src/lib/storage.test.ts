@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { loadDayViewModes, saveDayViewModes } from './storage';
+import {
+  loadAppViewTab,
+  loadDayViewModes,
+  loadMobilePanel,
+  saveAppViewTab,
+  saveDayViewModes,
+  saveMobilePanel,
+} from './storage';
 
 describe('day view mode persistence', () => {
   it('stores and restores same-day summary/detail preference', () => {
@@ -8,5 +15,17 @@ describe('day view mode persistence', () => {
     const loaded = loadDayViewModes();
     expect(loaded['2026-02-18']).toBe('detail');
     expect(loaded['2026-03-10']).toBe('summary');
+  });
+
+  it('stores and restores top-level app tab', () => {
+    localStorage.clear();
+    saveAppViewTab('trip_overview');
+    expect(loadAppViewTab()).toBe('trip_overview');
+  });
+
+  it('stores and restores mobile panel selection', () => {
+    localStorage.clear();
+    saveMobilePanel('map');
+    expect(loadMobilePanel()).toBe('map');
   });
 });

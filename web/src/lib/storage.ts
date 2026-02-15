@@ -1,8 +1,11 @@
-import type { SourceDocument, TripPlan, UnlockResponse, ViewMode } from '../types';
+import type { AppViewTab, MobilePanel, SourceDocument, TripPlan, UnlockResponse, ViewMode } from '../types';
+import { resolveAppViewTab, resolveMobilePanel } from './view-state';
 
 const TRIP_STATE_KEY = 'ptc_trip_plan_v1';
 const DAY_VIEW_KEY = 'ptc_day_view_modes_v1';
 const SESSION_KEY = 'ptc_session_v1';
+const APP_TAB_KEY = 'ptc_app_tab_v1';
+const MOBILE_PANEL_KEY = 'ptc_mobile_panel_v1';
 const SOURCE_DB_NAME = 'ptc_sources_v1';
 const SOURCE_STORE = 'docs';
 
@@ -57,6 +60,26 @@ export function loadSession(): UnlockResponse | null {
 export function clearSession(): void {
   if (typeof sessionStorage === 'undefined') return;
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+export function loadAppViewTab(): AppViewTab {
+  if (typeof localStorage === 'undefined') return 'day_detail';
+  return resolveAppViewTab(localStorage.getItem(APP_TAB_KEY), 'day_detail');
+}
+
+export function saveAppViewTab(tab: AppViewTab): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(APP_TAB_KEY, tab);
+}
+
+export function loadMobilePanel(): MobilePanel {
+  if (typeof localStorage === 'undefined') return 'now';
+  return resolveMobilePanel(localStorage.getItem(MOBILE_PANEL_KEY), 'now');
+}
+
+export function saveMobilePanel(panel: MobilePanel): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem(MOBILE_PANEL_KEY, panel);
 }
 
 function openDb(): Promise<IDBDatabase | null> {
