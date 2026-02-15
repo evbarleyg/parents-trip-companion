@@ -204,6 +204,7 @@ export function App() {
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const hasAppliedInitialRegionLockRef = useRef(false);
 
   const selectedDay = useMemo(
     () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
@@ -212,6 +213,11 @@ export function App() {
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
   const nowAndNext = useMemo(() => getCurrentAndNext(selectedItems), [selectedItems]);
   const regionSegments = useMemo(() => buildRegionSegments(tripPlan.days), [tripPlan.days]);
+  const todayDate = useMemo(() => getTodayInTripRange(tripPlan), [tripPlan]);
+  const todayRegion = useMemo(
+    () => tripPlan.days.find((day) => day.date === todayDate)?.region || selectedDay.region,
+    [tripPlan.days, todayDate, selectedDay.region],
+  );
 
   const whereAmIItem = useMemo(() => {
     if (!whereAmI.activeItemId || !selectedDay) return null;
@@ -284,6 +290,7 @@ export function App() {
 
     setMapStatus('initializing');
     setMapError(null);
+    hasAppliedInitialRegionLockRef.current = false;
 
     rafId = window.requestAnimationFrame(() => {
       if (cancelled) return;
@@ -372,6 +379,7 @@ export function App() {
     markerLayerRef.current.clearLayers();
 
     const bounds = L.latLngBounds([]);
+    const todayRegionBounds = L.latLngBounds([]);
 
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
@@ -394,6 +402,15 @@ export function App() {
         marker.bindPopup(
           `<b>${formatDateLabel(day.date)}</b><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
         );
+        marker.bindTooltip(
+          `<strong>${formatDateLabel(day.date)}</strong><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          {
+            direction: 'top',
+            sticky: true,
+            opacity: 0.95,
+            className: 'map-tooltip',
+          },
+        );
 
         marker.on('click', () => {
           setSelectedDate(day.date);
@@ -405,6 +422,9 @@ export function App() {
 
         markerLayerRef.current?.addLayer(marker);
         bounds.extend(coord);
+        if (day.region === todayRegion) {
+          todayRegionBounds.extend(coord);
+        }
       });
 
       if (coords.length >= 2) {
@@ -437,16 +457,30 @@ export function App() {
         fillOpacity: 1,
       });
       currentMarker.bindPopup('Current location');
+      currentMarker.bindTooltip('Current location', {
+        direction: 'top',
+        sticky: true,
+        opacity: 0.95,
+        className: 'map-tooltip',
+      });
       markerLayerRef.current.addLayer(currentMarker);
       bounds.extend(whereAmI.currentLatLng);
     }
 
-    if (bounds.isValid()) {
-      mapRef.current.fitBounds(bounds.pad(activeAppTab === 'trip_overview' ? 0.24 : 0.2));
+    if (bounds.isValid() && !hasAppliedInitialRegionLockRef.current) {
+      if (todayRegionBounds.isValid()) {
+        mapRef.current.fitBounds(todayRegionBounds.pad(0.28));
+        setStatusMessage(`Map locked to today's region on load: ${todayRegion}.`);
+      } else {
+        mapRef.current.fitBounds(bounds.pad(activeAppTab === 'trip_overview' ? 0.24 : 0.2));
+        setStatusMessage('Map loaded.');
+      }
+
+      hasAppliedInitialRegionLockRef.current = true;
     }
 
     invalidateMap();
-  }, [tripPlan, selectedDate, whereAmI.currentLatLng, activeAppTab, isMobile, mapStatus, invalidateMap]);
+  }, [tripPlan, selectedDate, whereAmI.currentLatLng, activeAppTab, isMobile, mapStatus, invalidateMap, todayRegion]);
 
   useEffect(() => {
     const next = detectWhereAmI(tripPlan, selectedDate, whereAmI.currentLatLng, whereAmI.mode);

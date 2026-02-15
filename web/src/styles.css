@@ -338,6 +338,33 @@ button:disabled {
   overflow: hidden;
 }
 
+.map-tooltip.leaflet-tooltip {
+  background: rgba(25, 43, 59, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(15, 29, 41, 0.28);
+  font-size: 0.79rem;
+  line-height: 1.3;
+  padding: 6px 8px;
+}
+
+.map-tooltip.leaflet-tooltip-top:before {
+  border-top-color: rgba(25, 43, 59, 0.95);
+}
+
+.map-tooltip.leaflet-tooltip-bottom:before {
+  border-bottom-color: rgba(25, 43, 59, 0.95);
+}
+
+.map-tooltip.leaflet-tooltip-left:before {
+  border-left-color: rgba(25, 43, 59, 0.95);
+}
+
+.map-tooltip.leaflet-tooltip-right:before {
+  border-right-color: rgba(25, 43, 59, 0.95);
+}
+
 .map.is-disabled {
   opacity: 0.45;
   pointer-events: none;
