@@ -1,0 +1,7 @@
+name = "parents-trip-companion-api"
+main = "src/index.ts"
+compatibility_date = "2026-02-15"
+
+[vars]
+ALLOWED_ORIGIN = "https://evbarleyg.github.io"
+OPENAI_MODEL = "gpt-4.1-mini"
