@@ -41,6 +41,11 @@ npm run build
 - `VITE_API_BASE_URL` (default `http://127.0.0.1:8787`)
 - `VITE_BASE_PATH` (set to `/parents-trip-companion/` for GitHub Pages)
 
+If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
+- unlock still works with passcode `parents2026`
+- recommendations/chat use local fallback responses
+- document extraction requires backend API
+
 ### API (`api/.dev.vars` for local)
 
 - `JWT_SECRET`
