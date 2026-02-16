@@ -63,6 +63,13 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
   recs: 'Recs',
 };
 
+type MapScope = 'day' | 'trip';
+
+const MAP_SCOPE_LABEL: Record<MapScope, string> = {
+  day: 'Selected Day',
+  trip: 'Full Trip',
+};
+
 interface RegionSegment {
   id: string;
   region: string;
@@ -168,8 +175,10 @@ export function App() {
   const [manualDayId, setManualDayId] = useState<string>('');
   const [manualItemId, setManualItemId] = useState<string>('');
 
-  const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(() => loadAppViewTab());
+  const initialAppTab = useMemo(() => loadAppViewTab(), []);
+  const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(initialAppTab);
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
+  const [mapScope, setMapScope] = useState<MapScope>(() => (initialAppTab === 'trip_overview' ? 'trip' : 'day'));
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -205,6 +214,7 @@ export function App() {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
+  const lastViewportFitKeyRef = useRef<string | null>(null);
 
   const selectedDay = useMemo(
     () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
@@ -241,11 +251,17 @@ export function App() {
   function setAppTab(tab: AppViewTab) {
     setActiveAppTabState(tab);
     saveAppViewTab(tab);
+    setMapScope(tab === 'trip_overview' ? 'trip' : 'day');
   }
 
   function setMobilePanel(panel: MobilePanel) {
     setActiveMobilePanelState(panel);
     saveMobilePanel(panel);
+  }
+
+  function selectDateForDayMap(date: string) {
+    setSelectedDate(date);
+    setMapScope('day');
   }
 
   function retryMapInit() {
@@ -291,6 +307,7 @@ export function App() {
     setMapStatus('initializing');
     setMapError(null);
     hasAppliedInitialRegionLockRef.current = false;
+    lastViewportFitKeyRef.current = null;
 
     rafId = window.requestAnimationFrame(() => {
       if (cancelled) return;
@@ -380,6 +397,7 @@ export function App() {
 
     const bounds = L.latLngBounds([]);
     const todayRegionBounds = L.latLngBounds([]);
+    const selectedDayBounds = L.latLngBounds([]);
 
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
@@ -413,7 +431,7 @@ export function App() {
         );
 
         marker.on('click', () => {
-          setSelectedDate(day.date);
+          selectDateForDayMap(day.date);
           setAppTab('day_detail');
           if (isMobile) {
             setMobilePanel('plan');
@@ -425,10 +443,13 @@ export function App() {
         if (day.region === todayRegion) {
           todayRegionBounds.extend(coord);
         }
+        if (day.date === selectedDate) {
+          selectedDayBounds.extend(coord);
+        }
       });
 
       if (coords.length >= 2) {
-        if (activeAppTab === 'trip_overview') {
+        if (mapScope === 'trip') {
           markerLayerRef.current.addLayer(
             L.polyline(coords, {
               color,
@@ -467,20 +488,46 @@ export function App() {
       bounds.extend(whereAmI.currentLatLng);
     }
 
-    if (bounds.isValid() && !hasAppliedInitialRegionLockRef.current) {
-      if (todayRegionBounds.isValid()) {
-        mapRef.current.fitBounds(todayRegionBounds.pad(0.28));
-        setStatusMessage(`Map locked to today's region on load: ${todayRegion}.`);
-      } else {
-        mapRef.current.fitBounds(bounds.pad(activeAppTab === 'trip_overview' ? 0.24 : 0.2));
-        setStatusMessage('Map loaded.');
-      }
+    if (bounds.isValid()) {
+      if (!hasAppliedInitialRegionLockRef.current) {
+        if (todayRegionBounds.isValid()) {
+          mapRef.current.fitBounds(todayRegionBounds.pad(0.28));
+          setStatusMessage(`Map locked to today's region on load: ${todayRegion}.`);
+        } else {
+          mapRef.current.fitBounds(bounds.pad(0.24));
+          setStatusMessage('Map loaded.');
+        }
 
-      hasAppliedInitialRegionLockRef.current = true;
+        hasAppliedInitialRegionLockRef.current = true;
+        lastViewportFitKeyRef.current = 'initial';
+      } else {
+        const fitKey = mapScope === 'day' ? `day:${selectedDate}` : 'trip';
+        if (lastViewportFitKeyRef.current !== fitKey) {
+          if (mapScope === 'day' && selectedDayBounds.isValid()) {
+            mapRef.current.fitBounds(selectedDayBounds.pad(0.36));
+            setStatusMessage(`Map focused on ${formatDateLabel(selectedDate)} in ${selectedDay.region}.`);
+          } else {
+            mapRef.current.fitBounds(bounds.pad(0.24));
+            setStatusMessage('Map showing full trip overview.');
+          }
+
+          lastViewportFitKeyRef.current = fitKey;
+        }
+      }
     }
 
     invalidateMap();
-  }, [tripPlan, selectedDate, whereAmI.currentLatLng, activeAppTab, isMobile, mapStatus, invalidateMap, todayRegion]);
+  }, [
+    tripPlan,
+    selectedDate,
+    selectedDay.region,
+    whereAmI.currentLatLng,
+    mapScope,
+    isMobile,
+    mapStatus,
+    invalidateMap,
+    todayRegion,
+  ]);
 
   useEffect(() => {
     const next = detectWhereAmI(tripPlan, selectedDate, whereAmI.currentLatLng, whereAmI.mode);
@@ -582,7 +629,7 @@ export function App() {
     const items = getActiveItems(day);
     const selectedItem = items.find((entry) => entry.id === manualItemId) || items[0] || null;
 
-    setSelectedDate(day.date);
+    selectDateForDayMap(day.date);
     setWhereAmI({
       mode: 'manual',
       currentLatLng:
@@ -898,7 +945,7 @@ export function App() {
               <h2>Today</h2>
               <div className="row">
                 <label htmlFor="day-select">Date</label>
-                <select id="day-select" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)}>
+                <select id="day-select" value={selectedDate} onChange={(event) => selectDateForDayMap(event.target.value)}>
                   {tripPlan.days.map((day) => (
                     <option key={day.date} value={day.date}>
                       {formatDateLabel(day.date)} - {day.region}
@@ -914,7 +961,7 @@ export function App() {
                   value={selectedDay.region}
                   onChange={(event) => {
                     const next = tripPlan.days.find((day) => day.region === event.target.value);
-                    if (next) setSelectedDate(next.date);
+                    if (next) selectDateForDayMap(next.date);
                   }}
                 >
                   {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
@@ -1086,11 +1133,24 @@ export function App() {
       )}
 
       <section className={`map-shell card ${panelHiddenClass('map')}`}>
-        <h2>Global Trip Map</h2>
+        <h2>Trip Map</h2>
+        <div className="map-scope-toggle" role="tablist" aria-label="Map scope">
+          {(['day', 'trip'] as MapScope[]).map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              className={mapScope === scope ? 'active' : ''}
+              onClick={() => setMapScope(scope)}
+              aria-pressed={mapScope === scope}
+            >
+              {MAP_SCOPE_LABEL[scope]}
+            </button>
+          ))}
+        </div>
         <p className="map-meta">
-          {activeAppTab === 'trip_overview'
-            ? 'Full-trip overview map. Click markers to open a specific day.'
-            : 'Day-focused map. Click markers to switch dates quickly.'}
+          {mapScope === 'trip'
+            ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
+            : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
 
         <div className="map-status" role="status" aria-live="polite">
@@ -1110,7 +1170,7 @@ export function App() {
         <div
           ref={mapElementRef}
           className={`map ${mapStatus === 'error' ? 'is-disabled' : ''}`}
-          aria-label="Global trip map"
+          aria-label="Trip map"
         />
       </section>
 
