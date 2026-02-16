@@ -1,4 +1,5 @@
 import type {
+  CapabilitiesResponse,
   ChatContext,
   ExtractResponse,
   RecommendationItem,
@@ -8,6 +9,15 @@ import type {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
 const FALLBACK_PASSCODE = 'SusanJim2026';
+
+const FRONTEND_FALLBACK_CAPABILITIES: CapabilitiesResponse = {
+  mode: 'fallback',
+  features: {
+    extract: false,
+    recommendations: true,
+    chat: true,
+  },
+};
 
 function fallbackRecommendations(
   lat: number,
@@ -62,6 +72,27 @@ async function requestJson<T>(path: string, init: RequestInit, token?: string): 
 
 export function getApiBaseUrl(): string {
   return hasApiBaseUrl() ? API_BASE_URL : 'fallback-mode (no backend)';
+}
+
+export async function getRuntimeCapabilities(): Promise<CapabilitiesResponse> {
+  if (!hasApiBaseUrl()) {
+    return FRONTEND_FALLBACK_CAPABILITIES;
+  }
+
+  try {
+    return await requestJson<CapabilitiesResponse>('/v1/capabilities', {
+      method: 'GET',
+    });
+  } catch {
+    return {
+      mode: 'fallback',
+      features: {
+        extract: false,
+        recommendations: false,
+        chat: false,
+      },
+    };
+  }
 }
 
 export async function unlockPasscode(passcode: string): Promise<UnlockResponse> {

@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import L from 'leaflet';
+import type * as Leaflet from 'leaflet';
 import {
   askRecommendationChat,
   extractDocument,
   getApiBaseUrl,
+  getRuntimeCapabilities,
   getNearbyRecommendations,
   unlockPasscode,
 } from './lib/api';
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
 import { formatDateLabel, slugify, toInputClock } from './lib/format';
+import { getTodayInTripRange } from './lib/date';
 import { detectWhereAmI } from './lib/location';
 import { applyTripPatch } from './lib/merge';
+import { trackEvent } from './lib/telemetry';
 import {
   clearSession,
   loadAppViewTab,
@@ -28,6 +31,7 @@ import {
 import { getCurrentAndNext } from './lib/time';
 import type {
   AppViewTab,
+  CapabilitiesResponse,
   ChatContext,
   MapStatus,
   MobilePanel,
@@ -37,6 +41,7 @@ import type {
   TripDay,
   TripPatch,
   TripPlan,
+  UiAlert,
   ViewMode,
   WhereAmIState,
 } from './types';
@@ -64,6 +69,7 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 };
 
 type MapScope = 'day' | 'trip';
+type LeafletModule = typeof import('leaflet');
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
   day: 'Selected Day',
@@ -76,6 +82,15 @@ interface RegionSegment {
   startDate: string;
   endDate: string;
   days: number;
+}
+
+interface MapStop {
+  id: string;
+  date: string;
+  label: string;
+  region: string;
+  lat: number;
+  lng: number;
 }
 
 function regionColor(region: string): string {
@@ -97,14 +112,6 @@ function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode
       activeView: viewModes[day.date] || day.activeView,
     })),
   };
-}
-
-function getTodayInTripRange(plan: TripPlan): string {
-  const today = new Date().toISOString().slice(0, 10);
-  if (plan.days.some((day) => day.date === today)) {
-    return today;
-  }
-  return plan.startDate;
 }
 
 function getActiveItems(day: TripDay): TripDay['summaryItems'] {
@@ -158,9 +165,20 @@ function buildRegionSegments(days: TripDay[]): RegionSegment[] {
 
 export function App() {
   const [passcode, setPasscode] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
   const [session, setSession] = useState(loadSession());
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [unlockPending, setUnlockPending] = useState(false);
+  const [runtimeCapabilities, setRuntimeCapabilities] = useState<CapabilitiesResponse>({
+    mode: 'fallback',
+    features: {
+      extract: false,
+      recommendations: true,
+      chat: true,
+    },
+  });
+  const [runtimeLoading, setRuntimeLoading] = useState(true);
+  const [uiAlert, setUiAlert] = useState<UiAlert | null>(null);
 
   const initialPlan = useMemo(() => {
     const restored = loadTripPlanState();
@@ -187,16 +205,19 @@ export function App() {
   const [mapStatus, setMapStatus] = useState<MapStatus>('initializing');
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapMountVersion, setMapMountVersion] = useState(0);
+  const [leafletModule, setLeafletModule] = useState<LeafletModule | null>(null);
 
   const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
   const [recommendationError, setRecommendationError] = useState<string | null>(null);
   const [recommendationLoading, setRecommendationLoading] = useState(false);
   const [activeCategory, setActiveCategory] = useState<RecCategory>('sights');
+  const [lastRecommendationCategory, setLastRecommendationCategory] = useState<RecCategory | null>(null);
 
   const [chatQuestion, setChatQuestion] = useState('');
   const [chatAnswer, setChatAnswer] = useState<string | null>(null);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [lastChatQuestion, setLastChatQuestion] = useState<string | null>(null);
 
   const [extracting, setExtracting] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -209,12 +230,13 @@ export function App() {
 
   const [statusMessage, setStatusMessage] = useState<string>('Ready');
 
-  const mapRef = useRef<L.Map | null>(null);
-  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const mapRef = useRef<Leaflet.Map | null>(null);
+  const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
   const lastViewportFitKeyRef = useRef<string | null>(null);
+  const recommendationCacheRef = useRef<Record<string, RecommendationItem[]>>({});
 
   const selectedDay = useMemo(
     () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
@@ -236,6 +258,47 @@ export function App() {
 
   const manualDay = useMemo(() => tripPlan.days.find((day) => day.date === manualDayId), [tripPlan.days, manualDayId]);
   const itemOptionsForManual = manualDay ? [...manualDay.summaryItems, ...manualDay.detailItems] : [];
+  const extractEnabled = runtimeCapabilities.features.extract;
+  const recommendationsEnabled = runtimeCapabilities.features.recommendations;
+  const chatEnabled = runtimeCapabilities.features.chat;
+  const dayModeLabel = selectedDay.activeView === 'detail' ? 'Detailed Plan' : 'Trip Summary';
+
+  const mapStops = useMemo<MapStop[]>(() => {
+    if (mapScope === 'day') {
+      return selectedItems
+        .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
+        .map((item) => ({
+          id: item.id,
+          date: selectedDay.date,
+          label: item.title,
+          region: selectedDay.region,
+          lat: item.lat as number,
+          lng: item.lng as number,
+        }));
+    }
+
+    return tripPlan.days
+      .map((day) => {
+        const firstWithCoords = getActiveItems(day).find(
+          (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
+        );
+        if (!firstWithCoords) return null;
+        return {
+          id: `${day.date}-${firstWithCoords.id}`,
+          date: day.date,
+          label: firstWithCoords.title,
+          region: day.region,
+          lat: firstWithCoords.lat as number,
+          lng: firstWithCoords.lng as number,
+        } satisfies MapStop;
+      })
+      .filter((stop): stop is MapStop => Boolean(stop));
+  }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
+
+  function postAlert(level: UiAlert['level'], message: string, scope?: string) {
+    setUiAlert({ level, message, scope });
+    setStatusMessage(message);
+  }
 
   const invalidateMap = useCallback(() => {
     if (!mapRef.current) return;
@@ -264,10 +327,27 @@ export function App() {
     setMapScope('day');
   }
 
+  function goToToday() {
+    selectDateForDayMap(todayDate);
+    postAlert('info', `Jumped to ${formatDateLabel(todayDate)}.`);
+  }
+
   function retryMapInit() {
     setMapError(null);
     setMapStatus('initializing');
     setMapMountVersion((prev) => prev + 1);
+  }
+
+  function focusMapStop(stop: MapStop) {
+    selectDateForDayMap(stop.date);
+    if (isMobile) setMobilePanel('map');
+
+    if (!mapRef.current) return;
+
+    mapRef.current.setView([stop.lat, stop.lng], mapScope === 'trip' ? 8 : 11, {
+      animate: true,
+    });
+    setStatusMessage(`Focused map on ${stop.label}.`);
   }
 
   function panelHiddenClass(panel: MobilePanel): string {
@@ -293,13 +373,64 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!session) {
+      setMapStatus('initializing');
+      setMapError(null);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCapabilities() {
+      setRuntimeLoading(true);
+      const next = await getRuntimeCapabilities();
+      if (cancelled) return;
+      setRuntimeCapabilities(next);
+      setRuntimeLoading(false);
+    }
+
+    void loadCapabilities();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session || leafletModule) return;
+
+    let cancelled = false;
+    setMapStatus('initializing');
+    setMapError(null);
+
+    Promise.all([import('leaflet'), import('leaflet/dist/leaflet.css')])
+      .then(([module]) => {
+        if (cancelled) return;
+        const normalized =
+          ((module as unknown as { default?: LeafletModule }).default as LeafletModule | undefined) || module;
+        setLeafletModule(normalized);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setMapStatus('error');
+        setMapError('Unable to load map library.');
+        postAlert('error', 'Unable to load map library.');
+        trackEvent('map_error');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [leafletModule, session]);
+
+  useEffect(() => {
+    if (!session || !leafletModule) return;
     const container = mapElementRef.current;
     if (!container) {
-      setMapStatus('error');
-      setMapError('Map container is unavailable.');
       return;
     }
 
+    const L = leafletModule;
     let cancelled = false;
     let rafId = 0;
     let settleRafId = 0;
@@ -330,10 +461,13 @@ export function App() {
           if (cancelled) return;
           invalidateMap();
           setMapStatus('ready');
+          trackEvent('map_ready');
         });
       } catch (error) {
         setMapStatus('error');
         setMapError((error as Error).message || 'Unable to initialize map.');
+        postAlert('error', 'Unable to initialize map.');
+        trackEvent('map_error');
       }
     });
 
@@ -351,7 +485,7 @@ export function App() {
       mapRef.current = null;
       markerLayerRef.current = null;
     };
-  }, [mapMountVersion, invalidateMap]);
+  }, [leafletModule, mapMountVersion, invalidateMap, session]);
 
   useEffect(() => {
     if (mapStatus !== 'ready') return;
@@ -391,7 +525,8 @@ export function App() {
   }, [activeAppTab, activeMobilePanel, isMobile, mapStatus, invalidateMap]);
 
   useEffect(() => {
-    if (mapStatus !== 'ready' || !mapRef.current || !markerLayerRef.current) return;
+    if (!leafletModule || mapStatus !== 'ready' || !mapRef.current || !markerLayerRef.current) return;
+    const L = leafletModule;
 
     markerLayerRef.current.clearLayers();
 
@@ -526,6 +661,7 @@ export function App() {
     isMobile,
     mapStatus,
     invalidateMap,
+    leafletModule,
     todayRegion,
   ]);
 
@@ -594,8 +730,13 @@ export function App() {
       saveSession(nextSession);
       setSession(nextSession);
       setPasscode('');
+      postAlert('success', 'Unlocked. Showing trip dashboard.');
+      trackEvent('unlock_success');
     } catch (error) {
-      setUnlockError((error as Error).message || 'Unlock failed');
+      const message = (error as Error).message || 'Unlock failed';
+      setUnlockError(message);
+      postAlert('error', message);
+      trackEvent('unlock_failure');
     } finally {
       setUnlockPending(false);
     }
@@ -606,6 +747,8 @@ export function App() {
     setSession(null);
     setRecommendations([]);
     setChatAnswer(null);
+    setUiAlert(null);
+    trackEvent('logout');
   }
 
   function setDayViewMode(date: string, mode: ViewMode) {
@@ -641,17 +784,21 @@ export function App() {
       confidence: 'medium',
       lastUpdated: new Date().toISOString(),
     });
+    postAlert('info', `Manual location override applied for ${formatDateLabel(day.date)}.`);
+    trackEvent('manual_override_apply');
   }
 
   function clearManualOverride() {
     setManualDayId('');
     setManualItemId('');
     setWhereAmI((prev) => ({ ...prev, mode: prev.currentLatLng ? 'auto' : 'unknown' }));
+    postAlert('info', 'Switched back to automatic location detection.');
+    trackEvent('manual_override_clear');
   }
 
   async function handleExtractUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file || !session) return;
+    if (!file || !session || !extractEnabled) return;
 
     setExtracting(true);
     setUploadError(null);
@@ -664,9 +811,17 @@ export function App() {
         warnings: extracted.warnings,
         patch: extracted.tripPatch,
       });
-      setStatusMessage(`Parsed ${file.name}. Review changes before applying.`);
+      if (extracted.warnings.length > 0) {
+        postAlert('warn', `Parsed ${file.name} with warnings. Review before applying.`);
+      } else {
+        postAlert('success', `Parsed ${file.name}. Review changes before applying.`);
+      }
+      trackEvent('extract_success');
     } catch (error) {
-      setUploadError((error as Error).message || 'Upload parse failed');
+      const message = (error as Error).message || 'Upload parse failed';
+      setUploadError(message);
+      postAlert('error', message);
+      trackEvent('extract_failure');
     } finally {
       setExtracting(false);
       event.currentTarget.value = '';
@@ -701,7 +856,8 @@ export function App() {
     const nextPlan = { ...merged, sources: dedupedSources };
     setTripPlan(nextPlan);
     setPendingPatch(null);
-    setStatusMessage(`Merged ${source.name}. Detailed days now default to detail view.`);
+    postAlert('success', `Merged ${source.name}. Detailed days now default to detail view.`);
+    trackEvent('merge_apply');
 
     try {
       await saveSourceDocument(source, JSON.stringify(pendingPatch.patch));
@@ -712,7 +868,8 @@ export function App() {
 
   function discardPendingPatch() {
     setPendingPatch(null);
-    setStatusMessage('Import review discarded.');
+    postAlert('info', 'Import review discarded.');
+    trackEvent('merge_discard');
   }
 
   function getRecommendationAnchor(): [number, number] | null {
@@ -728,18 +885,38 @@ export function App() {
     return [fallback.lat as number, fallback.lng as number];
   }
 
+  function recommendationCacheKey(category: RecCategory, anchor: [number, number]): string {
+    const roundedLat = anchor[0].toFixed(4);
+    const roundedLng = anchor[1].toFixed(4);
+    return `${selectedDay.date}:${category}:${roundedLat},${roundedLng}`;
+  }
+
   async function fetchRecommendations(category: RecCategory) {
-    if (!session) return;
+    if (!session || !recommendationsEnabled) return;
 
     const anchor = getRecommendationAnchor();
     if (!anchor) {
-      setRecommendationError('No location available. Use Locate or select a stop with coordinates.');
+      const message = 'No location available. Use Locate or select a stop with coordinates.';
+      setRecommendationError(message);
+      postAlert('warn', message);
+      return;
+    }
+
+    const cacheKey = recommendationCacheKey(category, anchor);
+    const cached = recommendationCacheRef.current[cacheKey];
+    if (cached) {
+      setRecommendations(cached);
+      setActiveCategory(category);
+      setRecommendationError(null);
+      setLastRecommendationCategory(category);
+      setStatusMessage(`Loaded ${cached.length} cached ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
       return;
     }
 
     setRecommendationLoading(true);
     setRecommendationError(null);
     setActiveCategory(category);
+    setLastRecommendationCategory(category);
 
     try {
       const items = await getNearbyRecommendations(
@@ -755,17 +932,22 @@ export function App() {
       );
 
       setRecommendations(items);
+      recommendationCacheRef.current[cacheKey] = items;
       setStatusMessage(`Loaded ${items.length} ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
+      postAlert('success', `Loaded ${items.length} ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
+      trackEvent('recommendations_success');
     } catch (error) {
-      setRecommendationError((error as Error).message || 'Recommendation lookup failed');
+      const message = (error as Error).message || 'Recommendation lookup failed';
+      setRecommendationError(message);
+      postAlert('error', message);
+      trackEvent('recommendations_failure');
     } finally {
       setRecommendationLoading(false);
     }
   }
 
-  async function submitChat(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!session || !chatQuestion.trim()) return;
+  async function requestChat(question: string, clearInput = false) {
+    if (!session || !chatEnabled || !question.trim()) return;
 
     const active = whereAmIItem;
     const context: ChatContext = {
@@ -779,11 +961,12 @@ export function App() {
 
     setChatLoading(true);
     setChatError(null);
+    setLastChatQuestion(question);
 
     try {
       const response = await askRecommendationChat(
         {
-          question: chatQuestion.trim(),
+          question,
           context,
           nearby: recommendations,
         },
@@ -794,12 +977,34 @@ export function App() {
       if (response.highlights.length > 0) {
         setRecommendations(response.highlights);
       }
-      setChatQuestion('');
+      if (clearInput) {
+        setChatQuestion('');
+      }
+      postAlert('success', 'Chat suggestions updated.');
+      trackEvent('chat_success');
     } catch (error) {
-      setChatError((error as Error).message || 'Chat request failed');
+      const message = (error as Error).message || 'Chat request failed';
+      setChatError(message);
+      postAlert('error', message);
+      trackEvent('chat_failure');
     } finally {
       setChatLoading(false);
     }
+  }
+
+  async function submitChat(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await requestChat(chatQuestion.trim(), true);
+  }
+
+  function retryRecommendationRequest() {
+    if (!lastRecommendationCategory) return;
+    void fetchRecommendations(lastRecommendationCategory);
+  }
+
+  function retryChatRequest() {
+    if (!lastChatQuestion) return;
+    void requestChat(lastChatQuestion, false);
   }
 
   if (!session) {
@@ -808,21 +1013,43 @@ export function App() {
         <section className="unlock-card">
           <h1>Parents Trip Companion</h1>
           <p>Enter your family passcode to open the trip site.</p>
+          <div className={`runtime-banner compact ${runtimeCapabilities.mode}`}>
+            <strong>Mode:</strong> {runtimeLoading ? 'Checking...' : runtimeCapabilities.mode === 'live' ? 'Live' : 'Fallback'}
+            <span>
+              {runtimeCapabilities.features.extract
+                ? ' Document extraction available.'
+                : ' Document extraction disabled in frontend fallback mode.'}
+            </span>
+          </div>
           <form onSubmit={handleUnlock}>
             <label htmlFor="passcode">Passcode</label>
-            <input
-              id="passcode"
-              type="password"
-              value={passcode}
-              onChange={(event) => setPasscode(event.target.value)}
-              required
-            />
+            <div className="passcode-row">
+              <input
+                id="passcode"
+                type={showPasscode ? 'text' : 'password'}
+                value={passcode}
+                onChange={(event) => setPasscode(event.target.value)}
+                required
+              />
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setShowPasscode((prev) => !prev)}
+                aria-label={showPasscode ? 'Hide passcode' : 'Show passcode'}
+              >
+                {showPasscode ? 'Hide' : 'Show'}
+              </button>
+            </div>
             <button type="submit" disabled={unlockPending}>
               {unlockPending ? 'Unlocking...' : 'Unlock'}
             </button>
-            {unlockError ? <p className="error-text">{unlockError}</p> : null}
+            {unlockError ? (
+              <p className="error-text" role="alert">
+                {unlockError}
+              </p>
+            ) : null}
           </form>
-          <p className="hint">API: {getApiBaseUrl()}</p>
+          <p className="hint">Runtime: {getApiBaseUrl()}</p>
         </section>
       </main>
     );
@@ -845,6 +1072,32 @@ export function App() {
         </div>
       </header>
 
+      <section className={`runtime-banner ${runtimeCapabilities.mode}`} role="status" aria-live="polite">
+        <strong>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</strong>
+        <span>
+          {runtimeCapabilities.mode === 'live'
+            ? ' Connected to backend services.'
+            : ' Using fallback behavior for one or more services.'}
+        </span>
+        <span>
+          Features: Extract {extractEnabled ? 'on' : 'off'} | Recs {recommendationsEnabled ? 'on' : 'off'} | Chat{' '}
+          {chatEnabled ? 'on' : 'off'}
+        </span>
+      </section>
+
+      {uiAlert ? (
+        <section
+          className={`ui-alert ${uiAlert.level}`}
+          role={uiAlert.level === 'error' ? 'alert' : 'status'}
+          aria-live={uiAlert.level === 'error' ? 'assertive' : 'polite'}
+        >
+          <span>{uiAlert.message}</span>
+          <button type="button" className="secondary-btn" onClick={() => setUiAlert(null)}>
+            Dismiss
+          </button>
+        </section>
+      ) : null}
+
       <nav className="app-tab-strip" aria-label="Primary view tabs">
         {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
           <button
@@ -857,6 +1110,29 @@ export function App() {
           </button>
         ))}
       </nav>
+
+      {activeAppTab === 'day_detail' ? (
+        <section className="day-context-bar">
+          <p className="day-context-now">
+            Now: {nowAndNext.current ? nowAndNext.current.title : 'No active block'}
+          </p>
+          <div className="pill-row compact">
+            <span className="pill">{formatDateLabel(selectedDate)}</span>
+            <span className="pill">{selectedDay.region}</span>
+            <span className="pill">{dayModeLabel}</span>
+          </div>
+          <div className="button-row compact">
+            <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
+              Back to Today
+            </button>
+            {isMobile ? (
+              <button type="button" className="secondary-btn" onClick={() => setMobilePanel('map')}>
+                Jump to Map
+              </button>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {activeAppTab === 'trip_overview' ? (
         <section className="trip-overview-grid">
@@ -911,7 +1187,7 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedDate(segment.startDate);
+                      selectDateForDayMap(segment.startDate);
                       setAppTab('day_detail');
                       if (isMobile) setMobilePanel('plan');
                     }}
@@ -1020,6 +1296,9 @@ export function App() {
             <article className={`card ${panelHiddenClass('now')}`}>
               <h2>Where Are They?</h2>
               <p>Use manual override if GPS is denied or inaccurate.</p>
+              {!autoLocateEnabled ? (
+                <p className="hint">Tip: enable “Locate + Auto Refresh” in the header for automatic updates every 5 minutes.</p>
+              ) : null}
               <div className="row">
                 <label htmlFor="manual-day">Day</label>
                 <select id="manual-day" value={manualDayId} onChange={(event) => setManualDayId(event.target.value)}>
@@ -1052,19 +1331,32 @@ export function App() {
 
             <article className={`card ${panelHiddenClass('recs')}`}>
               <h2>Quick Recommendations</h2>
+              {!recommendationsEnabled ? (
+                <p className="hint">Recommendations are unavailable in the current runtime mode.</p>
+              ) : null}
               <div className="button-row">
                 {(['sights', 'food', 'coffee', 'rest'] as RecCategory[]).map((category) => (
                   <button
                     key={category}
                     className={activeCategory === category ? 'active' : ''}
                     onClick={() => fetchRecommendations(category)}
-                    disabled={recommendationLoading}
+                    disabled={recommendationLoading || !recommendationsEnabled}
                   >
                     {CATEGORY_LABEL[category]}
                   </button>
                 ))}
               </div>
-              {recommendationError ? <p className="error-text">{recommendationError}</p> : null}
+              {recommendationLoading ? <p className="hint">Loading recommendations...</p> : null}
+              {recommendationError ? (
+                <div className="inline-error-actions">
+                  <p className="error-text" role="alert">
+                    {recommendationError}
+                  </p>
+                  <button type="button" className="secondary-btn" onClick={retryRecommendationRequest} disabled={!lastRecommendationCategory}>
+                    Retry
+                  </button>
+                </div>
+              ) : null}
               <ul className="recommendation-list">
                 {recommendations.map((item) => (
                   <li key={item.placeId}>
@@ -1083,27 +1375,64 @@ export function App() {
 
             <article className={`card ${panelHiddenClass('recs')}`}>
               <h2>Ask Live Suggestions</h2>
+              {!chatEnabled ? <p className="hint">Chat is unavailable in the current runtime mode.</p> : null}
               <form onSubmit={submitChat} className="chat-form">
+                <label htmlFor="chat-question">Question</label>
                 <textarea
+                  id="chat-question"
                   value={chatQuestion}
                   onChange={(event) => setChatQuestion(event.target.value)}
                   placeholder="Ask: What should we see nearby for the next 2 hours?"
+                  disabled={!chatEnabled}
                   required
                 />
-                <button type="submit" disabled={chatLoading}>
+                <button type="submit" disabled={chatLoading || !chatEnabled}>
                   {chatLoading ? 'Thinking...' : 'Ask'}
                 </button>
               </form>
-              {chatError ? <p className="error-text">{chatError}</p> : null}
+              {chatError ? (
+                <div className="inline-error-actions">
+                  <p className="error-text" role="alert">
+                    {chatError}
+                  </p>
+                  <button type="button" className="secondary-btn" onClick={retryChatRequest} disabled={!lastChatQuestion || chatLoading}>
+                    Retry
+                  </button>
+                </div>
+              ) : null}
               {chatAnswer ? <p className="chat-answer">{chatAnswer}</p> : null}
             </article>
 
             <article className={`card ${panelHiddenClass('plan')}`}>
               <h2>Upload Detailed Itinerary</h2>
-              <p>Supported: PDF, DOCX, DOC, TXT. Review before save is required.</p>
-              <input type="file" accept=".pdf,.docx,.doc,.txt" onChange={handleExtractUpload} disabled={extracting} />
+              <p>Upload -&gt; Review -&gt; Apply. Supported: PDF, DOCX, DOC, TXT.</p>
+              <div className="row">
+                <label htmlFor="itinerary-upload">Upload itinerary file</label>
+                <input
+                  id="itinerary-upload"
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt"
+                  onChange={handleExtractUpload}
+                  disabled={extracting || !extractEnabled}
+                  aria-describedby="itinerary-upload-help"
+                />
+                <small id="itinerary-upload-help">
+                  {extractEnabled
+                    ? 'Detailed files are parsed into a review patch before anything is saved.'
+                    : 'Upload parsing requires backend mode. Configure VITE_API_BASE_URL to enable extraction.'}
+                </small>
+              </div>
               {extracting ? <p>Parsing document...</p> : null}
-              {uploadError ? <p className="error-text">{uploadError}</p> : null}
+              {uploadError ? (
+                <div className="inline-error-actions">
+                  <p className="error-text" role="alert">
+                    {uploadError}
+                  </p>
+                  <button type="button" className="secondary-btn" onClick={() => setUploadError(null)}>
+                    Try Another File
+                  </button>
+                </div>
+              ) : null}
 
               {pendingPatch ? (
                 <div className="review-box">
@@ -1113,6 +1442,13 @@ export function App() {
                   <p>
                     Confidence: {Math.round(pendingPatch.patch.parseConfidence * 100)}% | Days added:{' '}
                     {pendingPatch.patch.daysAdded.length} | Days updated: {pendingPatch.patch.daysUpdated.length}
+                  </p>
+                  <p className="hint">
+                    Impacted dates:{' '}
+                    {[...pendingPatch.patch.daysAdded, ...pendingPatch.patch.daysUpdated]
+                      .map((day) => day.date)
+                      .slice(0, 6)
+                      .join(', ') || 'None'}
                   </p>
                   {pendingPatch.warnings.length > 0 ? (
                     <ul>
@@ -1128,13 +1464,31 @@ export function App() {
                 </div>
               ) : null}
             </article>
+
+            <article className={`card ${panelHiddenClass('plan')}`}>
+              <h2>Source Documents</h2>
+              {tripPlan.sources.length === 0 ? (
+                <p className="hint">No source documents merged yet.</p>
+              ) : (
+                <ul className="source-list">
+                  {tripPlan.sources.slice(0, 8).map((source) => (
+                    <li key={source.id}>
+                      <strong>{source.name}</strong>
+                      <span>
+                        {new Date(source.uploadedAt).toLocaleDateString()} | {source.status} | {source.coversDates.length} day(s)
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
           </section>
         </>
       )}
 
       <section className={`map-shell card ${panelHiddenClass('map')}`}>
         <h2>Trip Map</h2>
-        <div className="map-scope-toggle" role="tablist" aria-label="Map scope">
+        <div className="map-scope-toggle" role="group" aria-label="Map scope">
           {(['day', 'trip'] as MapScope[]).map((scope) => (
             <button
               key={scope}
@@ -1160,7 +1514,7 @@ export function App() {
 
         {mapStatus === 'error' ? (
           <div className="map-error">
-            <p>{mapError || 'Map failed to load.'}</p>
+            <p role="alert">{mapError || 'Map failed to load.'}</p>
             <button className="map-retry-btn" type="button" onClick={retryMapInit}>
               Retry Map
             </button>
@@ -1172,6 +1526,34 @@ export function App() {
           className={`map ${mapStatus === 'error' ? 'is-disabled' : ''}`}
           aria-label="Trip map"
         />
+
+        <div className="map-stop-shell">
+          <h3>Keyboard Stop List</h3>
+          <p className="hint">
+            Use these buttons to move map focus without dragging. {mapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
+          </p>
+          <ul className="map-stop-list">
+            {mapStops.length === 0 ? (
+              <li>
+                <span className="hint">No map stops with coordinates are available for this scope.</span>
+              </li>
+            ) : (
+              mapStops.slice(0, mapScope === 'trip' ? 20 : 12).map((stop) => (
+                <li key={stop.id}>
+                  <div>
+                    <strong>{stop.label}</strong>
+                    <small>
+                      {formatDateLabel(stop.date)} - {stop.region}
+                    </small>
+                  </div>
+                  <button type="button" className="secondary-btn" onClick={() => focusMapStop(stop)}>
+                    Focus Map
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
       </section>
 
       <footer className="status-row">

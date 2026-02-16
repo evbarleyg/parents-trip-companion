@@ -4,6 +4,7 @@ export type ViewMode = 'summary' | 'detail';
 export type AppViewTab = 'trip_overview' | 'day_detail';
 export type MobilePanel = 'now' | 'map' | 'plan' | 'recs';
 export type MapStatus = 'initializing' | 'ready' | 'error';
+export type RuntimeMode = 'live' | 'fallback';
 
 export interface ItineraryItem {
   id: string;
@@ -92,4 +93,21 @@ export interface ExtractResponse {
   documentId: string;
   tripPatch: TripPatch;
   warnings: string[];
+}
+
+export interface FeatureCapabilities {
+  extract: boolean;
+  recommendations: boolean;
+  chat: boolean;
+}
+
+export interface CapabilitiesResponse {
+  mode: RuntimeMode;
+  features: FeatureCapabilities;
+}
+
+export interface UiAlert {
+  level: 'info' | 'success' | 'warn' | 'error';
+  message: string;
+  scope?: string;
 }

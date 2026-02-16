@@ -29,6 +29,20 @@ function slugify(value: string): string {
     .slice(0, 64);
 }
 
+function runtimeCapabilities(env: EnvBindings) {
+  const hasOpenAi = Boolean(env.OPENAI_API_KEY);
+  const hasPlaces = Boolean(env.GOOGLE_PLACES_API_KEY);
+
+  return {
+    mode: hasOpenAi && hasPlaces ? 'live' : 'fallback',
+    features: {
+      extract: true,
+      recommendations: true,
+      chat: true,
+    },
+  } as const;
+}
+
 async function requireAuth(c: Context<AppEnv>): Promise<AuthPayload | null> {
   const authHeader = c.req.header('Authorization');
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -73,6 +87,7 @@ app.use('*', async (c, next) => {
 });
 
 app.get('/v1/health', (c) => c.json({ ok: true }));
+app.get('/v1/capabilities', (c) => c.json(runtimeCapabilities(c.env)));
 
 app.post('/v1/auth/unlock', async (c) => {
   const payload = await c.req.json<{ passcode?: string }>().catch(() => null);

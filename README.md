@@ -14,6 +14,7 @@ Standalone family travel companion app for the itinerary window **February 3, 20
 - API stores no long-lived user state; it returns extraction/recommendation/chat payloads.
 - CORS is restricted to configured origins.
 - Upload parsing is local-first from raw file text; OpenAI extraction is optional when key is present.
+- Runtime capability endpoint (`GET /v1/capabilities`) allows the web app to display `live` vs `fallback` status.
 
 ## Run Locally
 
@@ -45,6 +46,7 @@ If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
 - unlock still works with passcode `SusanJim2026`
 - recommendations/chat use local fallback responses
 - document extraction requires backend API
+- runtime banner will show `Fallback mode` with feature availability
 
 ### API (`api/.dev.vars` for local)
 

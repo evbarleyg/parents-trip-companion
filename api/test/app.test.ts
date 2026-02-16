@@ -28,6 +28,22 @@ async function unlockToken(env: Awaited<ReturnType<typeof makeEnv>>): Promise<st
 }
 
 describe('api integration', () => {
+  it('capabilities endpoint reports runtime mode and feature flags', async () => {
+    const env = await makeEnv();
+    const response = await app.request('/v1/capabilities', { method: 'GET' }, env);
+
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as {
+      mode: 'live' | 'fallback';
+      features: { extract: boolean; recommendations: boolean; chat: boolean };
+    };
+
+    expect(payload.mode).toBe('fallback');
+    expect(payload.features.extract).toBe(true);
+    expect(payload.features.recommendations).toBe(true);
+    expect(payload.features.chat).toBe(true);
+  });
+
   it('rejects invalid passcode and accepts valid passcode', async () => {
     const env = await makeEnv();
 

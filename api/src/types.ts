@@ -1,4 +1,5 @@
 export type RecCategory = 'sights' | 'food' | 'coffee' | 'rest';
+export type RuntimeMode = 'live' | 'fallback';
 
 export interface ItineraryItem {
   id: string;
@@ -56,4 +57,13 @@ export interface AuthPayload {
   scope: 'family';
   exp: number;
   iat: number;
+}
+
+export interface CapabilitiesResponse {
+  mode: RuntimeMode;
+  features: {
+    extract: boolean;
+    recommendations: boolean;
+    chat: boolean;
+  };
 }
