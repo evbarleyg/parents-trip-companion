@@ -37,4 +37,38 @@ describe('applyTripPatch', () => {
     expect(day?.detailItems[0].title).toBe('Detailed Salalah day');
     expect(day?.activeView).toBe('detail');
   });
+
+  it('preserves seeded actual moments when applying detail updates', () => {
+    const base = buildSeedTripPlan();
+    const before = base.days.find((item) => item.date === '2026-02-07');
+    expect(before?.actualMoments?.length).toBeGreaterThan(0);
+
+    const next = applyTripPatch(base, {
+      daysAdded: [],
+      daysUpdated: [
+        {
+          date: '2026-02-07',
+          region: 'Dubai',
+          activeView: 'detail',
+          summaryItems: [],
+          detailItems: [
+            {
+              id: 'detail-2',
+              title: 'Updated Dubai detail',
+              startTime: '10:00',
+              endTime: null,
+              location: 'Dubai Mall',
+              notes: 'Imported details',
+              category: 'sights',
+            },
+          ],
+        },
+      ],
+      conflicts: [],
+      parseConfidence: 0.8,
+    });
+
+    const after = next.days.find((item) => item.date === '2026-02-07');
+    expect(after?.actualMoments?.length).toBe(before?.actualMoments?.length);
+  });
 });

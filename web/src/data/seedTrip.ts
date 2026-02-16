@@ -1,4 +1,5 @@
 import type { ItineraryItem, RecCategory, TripDay, TripPlan } from '../types';
+import { getActualMomentsForDate } from './actualMoments';
 
 interface DaySeed {
   region: string;
@@ -845,11 +846,12 @@ export function buildSeedTripPlan(): TripPlan {
       summaryItems,
       detailItems,
       activeView: detailItems.length > 0 ? 'detail' : 'summary',
+      actualMoments: getActualMomentsForDate(date),
     };
   });
 
   return {
-    tripName: 'Parents 2-Month Adventure',
+    tripName: 'Where in the World Are Susan and Jim?',
     startDate: '2026-02-03',
     endDate: '2026-04-05',
     timezone: 'America/Los_Angeles',

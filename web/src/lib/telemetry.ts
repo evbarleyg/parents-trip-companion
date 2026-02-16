@@ -3,6 +3,8 @@ const TELEMETRY_KEY = 'ptc_telemetry_counts_v1';
 export type TelemetryEventName =
   | 'unlock_success'
   | 'unlock_failure'
+  | 'auto_unlock_success'
+  | 'auto_unlock_failure'
   | 'logout'
   | 'map_ready'
   | 'map_error'

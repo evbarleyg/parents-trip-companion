@@ -18,12 +18,28 @@ export interface ItineraryItem {
   lng?: number;
 }
 
+export interface TripActualPhoto {
+  id: string;
+  src: string;
+  alt: string;
+  caption: string;
+}
+
+export interface TripActualMoment {
+  id: string;
+  source: string;
+  whenLabel: string;
+  text: string;
+  photos: TripActualPhoto[];
+}
+
 export interface TripDay {
   date: string;
   region: string;
   summaryItems: ItineraryItem[];
   detailItems: ItineraryItem[];
   activeView: ViewMode;
+  actualMoments?: TripActualMoment[];
 }
 
 export interface SourceDocument {

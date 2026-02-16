@@ -3,7 +3,6 @@ import type * as Leaflet from 'leaflet';
 import {
   askRecommendationChat,
   extractDocument,
-  getApiBaseUrl,
   getRuntimeCapabilities,
   getNearbyRecommendations,
   unlockPasscode,
@@ -11,11 +10,12 @@ import {
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
 import { formatDateLabel, slugify, toInputClock } from './lib/format';
 import { getTodayInTripRange } from './lib/date';
+import { dayHasPhotos, dayOptionLabel, dayPhotoCount } from './lib/day';
 import { detectWhereAmI } from './lib/location';
 import { applyTripPatch } from './lib/merge';
+import { ensureOpenSession } from './lib/session';
 import { trackEvent } from './lib/telemetry';
 import {
-  clearSession,
   loadAppViewTab,
   loadDayViewModes,
   loadMobilePanel,
@@ -42,6 +42,7 @@ import type {
   TripPatch,
   TripPlan,
   UiAlert,
+  UnlockResponse,
   ViewMode,
   WhereAmIState,
 } from './types';
@@ -114,6 +115,25 @@ function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode
   };
 }
 
+function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
+  const seedDaysByDate = new Map(seed.days.map((day) => [day.date, day]));
+
+  return {
+    ...plan,
+    tripName: seed.tripName,
+    startDate: seed.startDate,
+    endDate: seed.endDate,
+    timezone: plan.timezone || seed.timezone,
+    days: plan.days.map((day) => {
+      const seedDay = seedDaysByDate.get(day.date);
+      return {
+        ...day,
+        actualMoments: day.actualMoments || seedDay?.actualMoments || [],
+      };
+    }),
+  };
+}
+
 function getActiveItems(day: TripDay): TripDay['summaryItems'] {
   return day.activeView === 'detail' && day.detailItems.length > 0 ? day.detailItems : day.summaryItems;
 }
@@ -163,12 +183,10 @@ function buildRegionSegments(days: TripDay[]): RegionSegment[] {
   return segments;
 }
 
+const AUTO_UNLOCK_PASSCODE = 'SusanJim2026';
+
 export function App() {
-  const [passcode, setPasscode] = useState('');
-  const [showPasscode, setShowPasscode] = useState(false);
-  const [session, setSession] = useState(loadSession());
-  const [unlockError, setUnlockError] = useState<string | null>(null);
-  const [unlockPending, setUnlockPending] = useState(false);
+  const [session, setSession] = useState<UnlockResponse>(() => ensureOpenSession(loadSession, saveSession));
   const [runtimeCapabilities, setRuntimeCapabilities] = useState<CapabilitiesResponse>({
     mode: 'fallback',
     features: {
@@ -181,13 +199,15 @@ export function App() {
   const [uiAlert, setUiAlert] = useState<UiAlert | null>(null);
 
   const initialPlan = useMemo(() => {
+    const seedPlan = buildSeedTripPlan();
     const restored = loadTripPlanState();
     const viewModes = loadDayViewModes();
-    return applyStoredViewModes(restored || buildSeedTripPlan(), viewModes);
+    const basePlan = restored ? hydratePlanWithSeedData(restored, seedPlan) : seedPlan;
+    return applyStoredViewModes(basePlan, viewModes);
   }, []);
 
   const [tripPlan, setTripPlan] = useState<TripPlan>(initialPlan || seedTripPlan);
-  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayInTripRange(initialPlan || seedTripPlan));
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayInTripRange(initialPlan));
   const [whereAmI, setWhereAmI] = useState<WhereAmIState>(() => defaultWhereAmI(selectedDate));
   const [autoLocateEnabled, setAutoLocateEnabled] = useState(false);
   const [manualDayId, setManualDayId] = useState<string>('');
@@ -262,6 +282,13 @@ export function App() {
   const recommendationsEnabled = runtimeCapabilities.features.recommendations;
   const chatEnabled = runtimeCapabilities.features.chat;
   const dayModeLabel = selectedDay.activeView === 'detail' ? 'Detailed Plan' : 'Trip Summary';
+  const selectedActualMoments = selectedDay.actualMoments || [];
+  const selectedDayHasPhotos = dayHasPhotos(selectedDay);
+  const selectedDayPhotoCount = dayPhotoCount(selectedDay);
+  const photoDates = useMemo(
+    () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
+    [tripPlan.days],
+  );
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (mapScope === 'day') {
@@ -373,13 +400,6 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) {
-      setMapStatus('initializing');
-      setMapError(null);
-    }
-  }, [session]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function loadCapabilities() {
@@ -397,7 +417,31 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!session || leafletModule) return;
+    let cancelled = false;
+
+    async function refreshSessionToken() {
+      try {
+        const next = await unlockPasscode(AUTO_UNLOCK_PASSCODE);
+        if (cancelled) return;
+        setSession(next);
+        saveSession(next);
+        trackEvent('auto_unlock_success');
+      } catch (error) {
+        if (cancelled) return;
+        const message = (error as Error).message || 'Automatic unlock failed.';
+        postAlert('warn', `Automatic live auth is unavailable: ${message}`);
+        trackEvent('auto_unlock_failure');
+      }
+    }
+
+    void refreshSessionToken();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (leafletModule) return;
 
     let cancelled = false;
     setMapStatus('initializing');
@@ -421,10 +465,10 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [leafletModule, session]);
+  }, [leafletModule]);
 
   useEffect(() => {
-    if (!session || !leafletModule) return;
+    if (!leafletModule) return;
     const container = mapElementRef.current;
     if (!container) {
       return;
@@ -485,7 +529,7 @@ export function App() {
       mapRef.current = null;
       markerLayerRef.current = null;
     };
-  }, [leafletModule, mapMountVersion, invalidateMap, session]);
+  }, [leafletModule, mapMountVersion, invalidateMap]);
 
   useEffect(() => {
     if (mapStatus !== 'ready') return;
@@ -533,11 +577,14 @@ export function App() {
     const bounds = L.latLngBounds([]);
     const todayRegionBounds = L.latLngBounds([]);
     const selectedDayBounds = L.latLngBounds([]);
+    const selectedDayCoords: [number, number][] = [];
 
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
       const color = regionColor(day.region);
       const isSelectedDate = day.date === selectedDate;
+      const isTodayDate = day.date === todayDate;
+      const hasPhotos = dayHasPhotos(day);
 
       const coords = items
         .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
@@ -545,18 +592,18 @@ export function App() {
 
       coords.forEach((coord, idx) => {
         const marker = L.circleMarker(coord, {
-          radius: isSelectedDate ? 6 : 4,
+          radius: isSelectedDate ? 7 : isTodayDate ? 6 : 4,
           color: '#ffffff',
-          weight: 1,
-          fillColor: color,
-          fillOpacity: isSelectedDate ? 0.95 : 0.55,
+          weight: isSelectedDate || isTodayDate ? 2 : 1,
+          fillColor: isTodayDate ? '#d0722b' : color,
+          fillOpacity: isSelectedDate ? 0.97 : isTodayDate ? 0.9 : 0.55,
         });
 
         marker.bindPopup(
-          `<b>${formatDateLabel(day.date)}</b><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<b>${formatDateLabel(day.date)}</b>${isTodayDate ? ' (Today)' : ''}${hasPhotos ? ' (Photos)' : ''}<br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
         );
         marker.bindTooltip(
-          `<strong>${formatDateLabel(day.date)}</strong><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<strong>${formatDateLabel(day.date)}${isTodayDate ? ' - Today' : ''}${hasPhotos ? ' - Photos' : ''}</strong><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
           {
             direction: 'top',
             sticky: true,
@@ -580,6 +627,7 @@ export function App() {
         }
         if (day.date === selectedDate) {
           selectedDayBounds.extend(coord);
+          selectedDayCoords.push(coord);
         }
       });
 
@@ -588,8 +636,8 @@ export function App() {
           markerLayerRef.current.addLayer(
             L.polyline(coords, {
               color,
-              weight: isSelectedDate ? 3.2 : 2,
-              opacity: isSelectedDate ? 0.9 : 0.33,
+              weight: isSelectedDate || isTodayDate ? 3.2 : 2,
+              opacity: isSelectedDate || isTodayDate ? 0.9 : 0.33,
             }),
           );
         } else if (isSelectedDate) {
@@ -638,11 +686,28 @@ export function App() {
       } else {
         const fitKey = mapScope === 'day' ? `day:${selectedDate}` : 'trip';
         if (lastViewportFitKeyRef.current !== fitKey) {
+          mapRef.current.stop();
+
           if (mapScope === 'day' && selectedDayBounds.isValid()) {
-            mapRef.current.fitBounds(selectedDayBounds.pad(0.36));
+            if (selectedDayCoords.length === 1) {
+              const [lat, lng] = selectedDayCoords[0];
+              const currentZoom = mapRef.current.getZoom();
+              mapRef.current.flyTo([lat, lng], Math.max(10, Math.min(13, currentZoom)), {
+                animate: true,
+                duration: 0.75,
+              });
+            } else {
+              mapRef.current.flyToBounds(selectedDayBounds.pad(0.36), {
+                padding: [20, 20],
+                maxZoom: 12,
+              });
+            }
             setStatusMessage(`Map focused on ${formatDateLabel(selectedDate)} in ${selectedDay.region}.`);
           } else {
-            mapRef.current.fitBounds(bounds.pad(0.24));
+            mapRef.current.flyToBounds(bounds.pad(0.24), {
+              padding: [20, 20],
+              maxZoom: 5,
+            });
             setStatusMessage('Map showing full trip overview.');
           }
 
@@ -662,6 +727,7 @@ export function App() {
     mapStatus,
     invalidateMap,
     leafletModule,
+    todayDate,
     todayRegion,
   ]);
 
@@ -720,37 +786,6 @@ export function App() {
     };
   }, [autoLocateEnabled, selectedDate, tripPlan]);
 
-  async function handleUnlock(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setUnlockError(null);
-    setUnlockPending(true);
-
-    try {
-      const nextSession = await unlockPasscode(passcode);
-      saveSession(nextSession);
-      setSession(nextSession);
-      setPasscode('');
-      postAlert('success', 'Unlocked. Showing trip dashboard.');
-      trackEvent('unlock_success');
-    } catch (error) {
-      const message = (error as Error).message || 'Unlock failed';
-      setUnlockError(message);
-      postAlert('error', message);
-      trackEvent('unlock_failure');
-    } finally {
-      setUnlockPending(false);
-    }
-  }
-
-  function logout() {
-    clearSession();
-    setSession(null);
-    setRecommendations([]);
-    setChatAnswer(null);
-    setUiAlert(null);
-    trackEvent('logout');
-  }
-
   function setDayViewMode(date: string, mode: ViewMode) {
     setTripPlan((prev) => {
       const updated = {
@@ -798,7 +833,7 @@ export function App() {
 
   async function handleExtractUpload(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
-    if (!file || !session || !extractEnabled) return;
+    if (!file || !extractEnabled) return;
 
     setExtracting(true);
     setUploadError(null);
@@ -892,7 +927,7 @@ export function App() {
   }
 
   async function fetchRecommendations(category: RecCategory) {
-    if (!session || !recommendationsEnabled) return;
+    if (!recommendationsEnabled) return;
 
     const anchor = getRecommendationAnchor();
     if (!anchor) {
@@ -947,7 +982,7 @@ export function App() {
   }
 
   async function requestChat(question: string, clearInput = false) {
-    if (!session || !chatEnabled || !question.trim()) return;
+    if (!chatEnabled || !question.trim()) return;
 
     const active = whereAmIItem;
     const context: ChatContext = {
@@ -1007,135 +1042,261 @@ export function App() {
     void requestChat(lastChatQuestion, false);
   }
 
-  if (!session) {
+  function renderActualMomentsCard(className = '') {
     return (
-      <main className="unlock-shell">
-        <section className="unlock-card">
-          <h1>Parents Trip Companion</h1>
-          <p>Enter your family passcode to open the trip site.</p>
-          <div className={`runtime-banner compact ${runtimeCapabilities.mode}`}>
-            <strong>Mode:</strong> {runtimeLoading ? 'Checking...' : runtimeCapabilities.mode === 'live' ? 'Live' : 'Fallback'}
-            <span>
-              {runtimeCapabilities.features.extract
-                ? ' Document extraction available.'
-                : ' Document extraction disabled in frontend fallback mode.'}
-            </span>
-          </div>
-          <form onSubmit={handleUnlock}>
-            <label htmlFor="passcode">Passcode</label>
-            <div className="passcode-row">
-              <input
-                id="passcode"
-                type={showPasscode ? 'text' : 'password'}
-                value={passcode}
-                onChange={(event) => setPasscode(event.target.value)}
-                required
-              />
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() => setShowPasscode((prev) => !prev)}
-                aria-label={showPasscode ? 'Hide passcode' : 'Show passcode'}
-              >
-                {showPasscode ? 'Hide' : 'Show'}
-              </button>
-            </div>
-            <button type="submit" disabled={unlockPending}>
-              {unlockPending ? 'Unlocking...' : 'Unlock'}
+      <article className={`card ${className}`.trim()}>
+        <h2>Actual Moments</h2>
+        <p className="hint">Pulled from the B-G-M Fam iMessage export and anchored to this day.</p>
+        {selectedActualMoments.length === 0 ? (
+          <p className="hint">No extracted moments saved for this day yet.</p>
+        ) : (
+          <ul className="actual-moment-list">
+            {selectedActualMoments.map((moment) => (
+              <li key={moment.id} className="actual-moment">
+                <div className="pill-row compact">
+                  <span className="pill">{moment.whenLabel}</span>
+                  <span className="pill">{moment.source}</span>
+                </div>
+                <p>{moment.text}</p>
+                {moment.photos.length > 0 ? (
+                  <div className="actual-photo-grid">
+                    {moment.photos.map((photo) => (
+                      <figure key={photo.id} className="actual-photo-card">
+                        <img src={photo.src} alt={photo.alt} loading="lazy" />
+                        <figcaption>{photo.caption}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </article>
+    );
+  }
+
+  function renderMapCard(className = '') {
+    return (
+      <section className={`map-shell card ${className}`.trim()}>
+        <h2>Trip Map</h2>
+        <div className="map-scope-toggle" role="group" aria-label="Map scope">
+          {(['day', 'trip'] as MapScope[]).map((scope) => (
+            <button
+              key={scope}
+              type="button"
+              className={mapScope === scope ? 'active' : ''}
+              onClick={() => setMapScope(scope)}
+              aria-pressed={mapScope === scope}
+            >
+              {MAP_SCOPE_LABEL[scope]}
             </button>
-            {unlockError ? (
-              <p className="error-text" role="alert">
-                {unlockError}
-              </p>
-            ) : null}
-          </form>
-          <p className="hint">Runtime: {getApiBaseUrl()}</p>
-        </section>
-      </main>
+          ))}
+        </div>
+        <p className="map-meta">
+          {mapScope === 'trip'
+            ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
+            : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
+        </p>
+
+        <div className="map-status" role="status" aria-live="polite">
+          {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
+          {mapStatus === 'ready' ? <span>Map ready</span> : null}
+        </div>
+
+        {mapStatus === 'error' ? (
+          <div className="map-error">
+            <p role="alert">{mapError || 'Map failed to load.'}</p>
+            <button className="map-retry-btn" type="button" onClick={retryMapInit}>
+              Retry Map
+            </button>
+          </div>
+        ) : null}
+
+        <div
+          ref={mapElementRef}
+          className={`map ${mapStatus === 'error' ? 'is-disabled' : ''}`}
+          aria-label="Trip map"
+        />
+
+        <div className="map-stop-shell">
+          <h3>Keyboard Stop List</h3>
+          <p className="hint">
+            Use these buttons to move map focus without dragging.{' '}
+            {mapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
+          </p>
+          <ul className="map-stop-list">
+            {mapStops.length === 0 ? (
+              <li>
+                <span className="hint">No map stops with coordinates are available for this scope.</span>
+              </li>
+            ) : (
+              mapStops.slice(0, mapScope === 'trip' ? 20 : 12).map((stop) => (
+                <li key={stop.id}>
+                  <div>
+                    <strong>{stop.label}</strong>
+                    <small>
+                      {formatDateLabel(stop.date)} - {stop.region}
+                      {stop.date === todayDate ? ' (Today)' : ''}
+                      {photoDates.has(stop.date) ? ' (Photos)' : ''}
+                    </small>
+                  </div>
+                  <button type="button" className="secondary-btn" onClick={() => focusMapStop(stop)}>
+                    Focus Map
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      </section>
     );
   }
 
   return (
     <main className="layout">
+      <a className="skip-link" href="#primary-content">
+        Skip to main content
+      </a>
       <header className="topbar">
         <div>
           <h1>{tripPlan.tripName}</h1>
           <p>
-            {tripPlan.startDate} to {tripPlan.endDate} | Local-first itinerary companion
+            {tripPlan.startDate} to {tripPlan.endDate}
           </p>
         </div>
         <div className="topbar-actions">
           <button onClick={() => setAutoLocateEnabled((prev) => !prev)}>
             {autoLocateEnabled ? 'Pause Auto Locate' : 'Locate + Auto Refresh'}
           </button>
-          <button onClick={logout}>Lock</button>
         </div>
       </header>
+      <p className="sr-only-status" role="status" aria-live="polite" aria-atomic="true">
+        {statusMessage}
+      </p>
 
-      <section className={`runtime-banner ${runtimeCapabilities.mode}`} role="status" aria-live="polite">
-        <strong>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</strong>
-        <span>
-          {runtimeCapabilities.mode === 'live'
-            ? ' Connected to backend services.'
-            : ' Using fallback behavior for one or more services.'}
-        </span>
-        <span>
-          Features: Extract {extractEnabled ? 'on' : 'off'} | Recs {recommendationsEnabled ? 'on' : 'off'} | Chat{' '}
-          {chatEnabled ? 'on' : 'off'}
-        </span>
+      <section className="title-toolbar" aria-label="Trip controls">
+        <nav className="toolbar-tabs" aria-label="Primary view tabs">
+          {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className={`app-tab ${activeAppTab === tab ? 'active' : ''}`}
+              onClick={() => setAppTab(tab)}
+            >
+              {APP_TAB_LABEL[tab]}
+            </button>
+          ))}
+        </nav>
+
+        <div className="toolbar-pill-row">
+          {activeAppTab === 'day_detail' ? (
+            <>
+              <details className="toolbar-popover">
+                <summary>{formatDateLabel(selectedDate)}</summary>
+                <div className="toolbar-popover-body">
+                  <label htmlFor="toolbar-day-select">Date</label>
+                  <select
+                    id="toolbar-day-select"
+                    value={selectedDate}
+                    onChange={(event) => selectDateForDayMap(event.target.value)}
+                  >
+                    {tripPlan.days.map((day) => (
+                      <option key={day.date} value={day.date}>
+                        {dayOptionLabel(day, todayDate)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </details>
+
+              <details className="toolbar-popover">
+                <summary>{selectedDay.region}</summary>
+                <div className="toolbar-popover-body">
+                  <label htmlFor="toolbar-region-select">Region</label>
+                  <select
+                    id="toolbar-region-select"
+                    value={selectedDay.region}
+                    onChange={(event) => {
+                      const next = tripPlan.days.find((day) => day.region === event.target.value);
+                      if (next) selectDateForDayMap(next.date);
+                    }}
+                  >
+                    {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
+                      <option key={region} value={region}>
+                        {region}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </details>
+
+              <button type="button" className="secondary-btn" onClick={() => setDayViewMode(selectedDay.date, selectedDay.activeView === 'detail' ? 'summary' : 'detail')}>
+                {dayModeLabel}
+              </button>
+
+              {selectedDayHasPhotos ? (
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={() => {
+                    setAppTab('day_detail');
+                    if (isMobile) setMobilePanel('plan');
+                  }}
+                >
+                  Photos ({selectedDayPhotoCount})
+                </button>
+              ) : null}
+            </>
+          ) : null}
+
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setMapScope((prev) => (prev === 'day' ? 'trip' : 'day'))}
+          >
+            Map: {MAP_SCOPE_LABEL[mapScope]}
+          </button>
+
+          <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
+            Back to Today
+          </button>
+
+          <details className={`toolbar-popover runtime ${runtimeCapabilities.mode}`}>
+            <summary>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</summary>
+            <div className="toolbar-popover-body">
+              <p>
+                Features: Extract {extractEnabled ? 'on' : 'off'} | Recs {recommendationsEnabled ? 'on' : 'off'} | Chat{' '}
+                {chatEnabled ? 'on' : 'off'}
+              </p>
+            </div>
+          </details>
+
+          {uiAlert ? (
+            <details className={`toolbar-popover alert ${uiAlert.level}`}>
+              <summary>{uiAlert.message}</summary>
+              <div className="toolbar-popover-body">
+                <button type="button" className="secondary-btn" onClick={() => setUiAlert(null)}>
+                  Dismiss
+                </button>
+              </div>
+            </details>
+          ) : null}
+        </div>
+
+        {activeAppTab === 'day_detail' ? (
+          <div className="toolbar-now-row">
+            <span>Now: {nowAndNext.current ? nowAndNext.current.title : 'No active block'}</span>
+            <span>Next: {nowAndNext.next ? nowAndNext.next.title : 'No upcoming block'}</span>
+            <span>Where am I: {whereAmI.confidence}</span>
+            <span>Mode: {whereAmI.mode}</span>
+          </div>
+        ) : null}
       </section>
 
-      {uiAlert ? (
-        <section
-          className={`ui-alert ${uiAlert.level}`}
-          role={uiAlert.level === 'error' ? 'alert' : 'status'}
-          aria-live={uiAlert.level === 'error' ? 'assertive' : 'polite'}
-        >
-          <span>{uiAlert.message}</span>
-          <button type="button" className="secondary-btn" onClick={() => setUiAlert(null)}>
-            Dismiss
-          </button>
-        </section>
-      ) : null}
-
-      <nav className="app-tab-strip" aria-label="Primary view tabs">
-        {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            className={`app-tab ${activeAppTab === tab ? 'active' : ''}`}
-            onClick={() => setAppTab(tab)}
-          >
-            {APP_TAB_LABEL[tab]}
-          </button>
-        ))}
-      </nav>
-
-      {activeAppTab === 'day_detail' ? (
-        <section className="day-context-bar">
-          <p className="day-context-now">
-            Now: {nowAndNext.current ? nowAndNext.current.title : 'No active block'}
-          </p>
-          <div className="pill-row compact">
-            <span className="pill">{formatDateLabel(selectedDate)}</span>
-            <span className="pill">{selectedDay.region}</span>
-            <span className="pill">{dayModeLabel}</span>
-          </div>
-          <div className="button-row compact">
-            <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
-              Back to Today
-            </button>
-            {isMobile ? (
-              <button type="button" className="secondary-btn" onClick={() => setMobilePanel('map')}>
-                Jump to Map
-              </button>
-            ) : null}
-          </div>
-        </section>
-      ) : null}
-
-      {activeAppTab === 'trip_overview' ? (
-        <section className="trip-overview-grid">
+      <section id="primary-content">
+        {activeAppTab === 'trip_overview' ? (
+          <section className="trip-overview-grid">
           <article className="card">
             <h2>Trip Timeline</h2>
             <p>Jump by date or region. The map shows the full trip path.</p>
@@ -1148,7 +1309,7 @@ export function App() {
               >
                 {tripPlan.days.map((day) => (
                   <option key={day.date} value={day.date}>
-                    {formatDateLabel(day.date)} - {day.region}
+                    {dayOptionLabel(day, todayDate)}
                   </option>
                 ))}
               </select>
@@ -1170,19 +1331,41 @@ export function App() {
                 ))}
               </select>
             </div>
+
+            <ul className="day-overview-list">
+              {tripPlan.days.map((day) => (
+                <li
+                  key={`overview-day-${day.date}`}
+                  className={`day-row ${day.date === todayDate ? 'is-today' : ''} ${day.date === selectedDate ? 'is-selected' : ''}`}
+                >
+                  <button type="button" className="day-row-button" onClick={() => setSelectedDate(day.date)}>
+                    <span>{formatDateLabel(day.date)}</span>
+                    <small>{day.region}</small>
+                  </button>
+                  <div className="day-row-tags">
+                    {dayHasPhotos(day) ? <span className="photo-tag">Pics</span> : null}
+                    {day.date === todayDate ? <span className="today-tag">Today</span> : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
           </article>
 
           <article className="card">
             <h2>Region Legs</h2>
             <ul className="region-overview-list">
               {regionSegments.map((segment) => (
-                <li key={segment.id} className="region-row">
+                <li
+                  key={segment.id}
+                  className={`region-row ${todayDate >= segment.startDate && todayDate <= segment.endDate ? 'is-today' : ''}`}
+                >
                   <div>
                     <strong>{segment.region}</strong>
                     <p>
                       {formatDateLabel(segment.startDate)} to {formatDateLabel(segment.endDate)} ({segment.days}{' '}
                       {segment.days === 1 ? 'day' : 'days'})
                     </p>
+                    {todayDate >= segment.startDate && todayDate <= segment.endDate ? <span className="today-tag">Current Region</span> : null}
                   </div>
                   <button
                     type="button"
@@ -1198,9 +1381,9 @@ export function App() {
               ))}
             </ul>
           </article>
-        </section>
-      ) : (
-        <>
+          </section>
+        ) : (
+          <>
           {isMobile ? (
             <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
               {(['now', 'map', 'plan', 'recs'] as MobilePanel[]).map((panel) => (
@@ -1216,37 +1399,15 @@ export function App() {
             </nav>
           ) : null}
 
-          <section className="dashboard-grid">
+          <section className="day-focus-grid">
+            {renderMapCard(`focus-map ${panelHiddenClass('map')}`)}
+            {renderActualMomentsCard(`focus-moments ${panelHiddenClass('plan')}`)}
+          </section>
+
+          <section className="dashboard-grid secondary-grid">
             <article className={`card ${panelHiddenClass('now')}`}>
               <h2>Today</h2>
-              <div className="row">
-                <label htmlFor="day-select">Date</label>
-                <select id="day-select" value={selectedDate} onChange={(event) => selectDateForDayMap(event.target.value)}>
-                  {tripPlan.days.map((day) => (
-                    <option key={day.date} value={day.date}>
-                      {formatDateLabel(day.date)} - {day.region}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="row">
-                <label htmlFor="region-select">Region jump</label>
-                <select
-                  id="region-select"
-                  value={selectedDay.region}
-                  onChange={(event) => {
-                    const next = tripPlan.days.find((day) => day.region === event.target.value);
-                    if (next) selectDateForDayMap(next.date);
-                  }}
-                >
-                  {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
-                    <option key={region} value={region}>
-                      {region}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <p className="hint">Use the title bar controls to change date, region, and plan mode.</p>
 
               <div className="pill-row">
                 <span className={`pill ${whereAmI.confidence}`}>Where am I: {whereAmI.confidence}</span>
@@ -1305,7 +1466,7 @@ export function App() {
                   <option value="">Select day</option>
                   {tripPlan.days.map((day) => (
                     <option key={day.date} value={day.date}>
-                      {formatDateLabel(day.date)} - {day.region}
+                      {dayOptionLabel(day, todayDate)}
                     </option>
                   ))}
                 </select>
@@ -1483,82 +1644,15 @@ export function App() {
               )}
             </article>
           </section>
-        </>
-      )}
+          </>
+        )}
 
-      <section className={`map-shell card ${panelHiddenClass('map')}`}>
-        <h2>Trip Map</h2>
-        <div className="map-scope-toggle" role="group" aria-label="Map scope">
-          {(['day', 'trip'] as MapScope[]).map((scope) => (
-            <button
-              key={scope}
-              type="button"
-              className={mapScope === scope ? 'active' : ''}
-              onClick={() => setMapScope(scope)}
-              aria-pressed={mapScope === scope}
-            >
-              {MAP_SCOPE_LABEL[scope]}
-            </button>
-          ))}
-        </div>
-        <p className="map-meta">
-          {mapScope === 'trip'
-            ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
-            : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
-        </p>
-
-        <div className="map-status" role="status" aria-live="polite">
-          {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
-          {mapStatus === 'ready' ? <span>Map ready</span> : null}
-        </div>
-
-        {mapStatus === 'error' ? (
-          <div className="map-error">
-            <p role="alert">{mapError || 'Map failed to load.'}</p>
-            <button className="map-retry-btn" type="button" onClick={retryMapInit}>
-              Retry Map
-            </button>
-          </div>
-        ) : null}
-
-        <div
-          ref={mapElementRef}
-          className={`map ${mapStatus === 'error' ? 'is-disabled' : ''}`}
-          aria-label="Trip map"
-        />
-
-        <div className="map-stop-shell">
-          <h3>Keyboard Stop List</h3>
-          <p className="hint">
-            Use these buttons to move map focus without dragging. {mapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
-          </p>
-          <ul className="map-stop-list">
-            {mapStops.length === 0 ? (
-              <li>
-                <span className="hint">No map stops with coordinates are available for this scope.</span>
-              </li>
-            ) : (
-              mapStops.slice(0, mapScope === 'trip' ? 20 : 12).map((stop) => (
-                <li key={stop.id}>
-                  <div>
-                    <strong>{stop.label}</strong>
-                    <small>
-                      {formatDateLabel(stop.date)} - {stop.region}
-                    </small>
-                  </div>
-                  <button type="button" className="secondary-btn" onClick={() => focusMapStop(stop)}>
-                    Focus Map
-                  </button>
-                </li>
-              ))
-            )}
-          </ul>
-        </div>
+        {activeAppTab === 'trip_overview' ? renderMapCard(panelHiddenClass('map')) : null}
       </section>
 
       <footer className="status-row">
         <span>{statusMessage}</span>
-        <span>Session expires: {new Date(session.expiresAt).toLocaleString()}</span>
+        <span>{runtimeCapabilities.mode === 'live' ? 'Live services connected' : 'Fallback services active'}</span>
       </footer>
     </main>
   );

@@ -1,12 +1,13 @@
-# Parents Trip Companion
+# Where in the World Are Susan and Jim?
 
 Standalone family travel companion app for the itinerary window **February 3, 2026** through **April 5, 2026**.
 
 - `web/`: Vite + React + TypeScript + Leaflet (GitHub Pages target)
 - `api/`: Cloudflare Workers + Hono + TypeScript
-- Passcode gate with JWT session
+- No manual lock screen; frontend auto-initializes a local session and attempts backend auto-unlock
 - Document upload + review-before-merge flow (`PDF`, `DOCX`, `DOC`, `TXT`)
 - Today-first dashboard with map, location scoring, live recommendations, and chat
+- Day-level "Actual Moments" cards enriched from the `B-G-M Fam` iMessage export (text snippets + photos)
 
 ## Architecture
 
@@ -43,7 +44,7 @@ npm run build
 - `VITE_BASE_PATH` (set to `/parents-trip-companion/` for GitHub Pages)
 
 If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
-- unlock still works with passcode `SusanJim2026`
+- app loads directly with local fallback session
 - recommendations/chat use local fallback responses
 - document extraction requires backend API
 - runtime banner will show `Fallback mode` with feature availability
@@ -57,9 +58,11 @@ If `VITE_API_BASE_URL` is omitted, web runs in fallback mode:
 - `OPENAI_API_KEY` (optional, fallback chat/extraction otherwise)
 - `OPENAI_MODEL` (optional; default `gpt-4.1-mini`)
 
-Default fallback passcode (if `PASSCODE_HASH` is not set) is:
+Default backend passcode (if `PASSCODE_HASH` is not set) is:
 
 - `SusanJim2026`
+
+Frontend auto-unlock uses that same default so users are not prompted for passcode on load.
 
 To generate passcode hash quickly in Node:
 

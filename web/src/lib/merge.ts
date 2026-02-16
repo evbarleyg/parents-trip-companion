@@ -5,6 +5,10 @@ function cloneDay(day: TripDay): TripDay {
     ...day,
     summaryItems: day.summaryItems.map((item) => ({ ...item })),
     detailItems: day.detailItems.map((item) => ({ ...item })),
+    actualMoments: day.actualMoments?.map((moment) => ({
+      ...moment,
+      photos: moment.photos.map((photo) => ({ ...photo })),
+    })),
   };
 }
 
