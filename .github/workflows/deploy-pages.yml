@@ -2,7 +2,7 @@ name: Deploy Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/telegram]
   workflow_dispatch:
 
 permissions:
