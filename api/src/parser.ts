@@ -37,12 +37,31 @@ function classifyCategory(text: string): RecCategory {
   return 'sights';
 }
 
-function parseTimeRange(text: string): { start: string; end: string | null } {
-  const range = text.match(/(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})/);
-  if (range) return { start: range[1].padStart(5, '0'), end: range[2].padStart(5, '0') };
+function normalizeClock(raw: string): string {
+  const m = raw.trim().toLowerCase().match(/^(\d{1,2}):(\d{2})(?:\s*([ap]m))?$/);
+  if (!m) return raw.padStart(5, '0');
 
-  const single = text.match(/(\d{1,2}:\d{2})/);
-  if (single) return { start: single[1].padStart(5, '0'), end: null };
+  let hours = Number(m[1]);
+  const minutes = Number(m[2]);
+  const meridiem = m[3];
+
+  if (meridiem) {
+    if (meridiem === 'am') {
+      if (hours === 12) hours = 0;
+    } else if (hours !== 12) {
+      hours += 12;
+    }
+  }
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function parseTimeRange(text: string): { start: string; end: string | null } {
+  const range = text.match(/(\d{1,2}:\d{2}\s*[ap]m?|\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2}\s*[ap]m?|\d{1,2}:\d{2})/i);
+  if (range) return { start: normalizeClock(range[1]), end: normalizeClock(range[2]) };
+
+  const single = text.match(/(\d{1,2}:\d{2}\s*[ap]m?|\d{1,2}:\d{2})/i);
+  if (single) return { start: normalizeClock(single[1]), end: null };
 
   return { start: '09:00', end: null };
 }
@@ -75,22 +94,44 @@ function localTripPatchFromText(text: string): { patch: TripPatch; warnings: str
   function flushCurrent() {
     if (!activeDate) return;
 
-    const joined = eventLines.join(' ').trim();
-    if (!joined) {
+    const cleanedLines = eventLines
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => !/^(-|•|\*)$/.test(line));
+
+    if (cleanedLines.length === 0) {
       eventLines = [];
       location = '';
       return;
     }
 
-    const summaryTitle = joined.split('.').map((item) => item.trim()).find(Boolean) || joined;
-    const summaryItem = makeItem(activeDate, summaryTitle.slice(0, 140), location || 'TBD', joined, 1);
-    const detailItem = { ...summaryItem, id: `${activeDate}-detail-1` };
+    const detailItems = cleanedLines.map((line, idx) => {
+      const title = line
+        .replace(/^[-•*]\s*/, '')
+        .replace(/^(\d{1,2}:\d{2}\s*[–-]\s*\d{1,2}:\d{2})\s*/i, '')
+        .replace(/^(\d{1,2}:\d{2}(?:\s*[ap]m)?)\s*/i, '')
+        .trim();
+
+      return makeItem(
+        activeDate,
+        (title || line).slice(0, 140),
+        location || 'TBD',
+        line,
+        idx + 1,
+      );
+    });
+
+    const summaryItems = detailItems.slice(0, 3).map((item, idx) => ({
+      ...item,
+      id: `${activeDate}-summary-${idx + 1}`,
+      notes: item.notes,
+    }));
 
     days.push({
       date: activeDate,
       region: location || 'Imported itinerary',
-      summaryItems: [{ ...summaryItem, id: `${activeDate}-summary-1` }],
-      detailItems: [detailItem],
+      summaryItems,
+      detailItems: detailItems.map((item, idx) => ({ ...item, id: `${activeDate}-detail-${idx + 1}` })),
       activeView: 'detail',
     });
 
