@@ -2,11 +2,33 @@ import type { ItineraryItem } from '../types';
 
 export function parseClockToMinutes(value: string | null | undefined): number | null {
   if (!value) return null;
-  const match = value.match(/(\d{1,2}):(\d{2})/);
+
+  const normalized = value.trim().toLowerCase();
+
+  // Supports:
+  // - 24h: "09:30", "9:30"
+  // - 12h: "9:30 am", "9:30pm", "12:05 AM"
+  const match = normalized.match(/^(\d{1,2}):(\d{2})(?:\s*([ap]m))?$/i);
   if (!match) return null;
-  const hours = Number(match[1]);
+
+  let hours = Number(match[1]);
   const minutes = Number(match[2]);
-  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  const meridiem = match[3]?.toLowerCase();
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes) || minutes < 0 || minutes > 59) {
+    return null;
+  }
+
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    if (meridiem === 'am') {
+      if (hours === 12) hours = 0;
+    } else if (hours !== 12) {
+      hours += 12;
+    }
+  }
+
+  if (hours < 0 || hours > 23) return null;
   return hours * 60 + minutes;
 }
 
@@ -20,6 +42,12 @@ export function isNowInItem(item: ItineraryItem, minutes: number): boolean {
 
   if (start === null) return false;
   if (end === null) return minutes >= start;
+
+  // Overnight range, e.g. 23:00 -> 01:00
+  if (end < start) {
+    return minutes >= start || minutes <= end;
+  }
+
   return minutes >= start && minutes <= end;
 }
 

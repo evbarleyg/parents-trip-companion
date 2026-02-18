@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCurrentAndNext, parseClockToMinutes } from './time';
+import { getCurrentAndNext, isNowInItem, parseClockToMinutes } from './time';
 
 const items = [
   {
@@ -29,6 +29,14 @@ describe('time parsing', () => {
     expect(parseClockToMinutes('xx')).toBeNull();
   });
 
+  it('supports 12-hour time formats', () => {
+    expect(parseClockToMinutes('9:15 am')).toBe(555);
+    expect(parseClockToMinutes('9:15pm')).toBe(21 * 60 + 15);
+    expect(parseClockToMinutes('12:00 am')).toBe(0);
+    expect(parseClockToMinutes('12:00 pm')).toBe(12 * 60);
+    expect(parseClockToMinutes('13:00 pm')).toBeNull();
+  });
+
   it('finds current and next blocks', () => {
     const current = getCurrentAndNext(items, 9 * 60 + 30);
     expect(current.current?.id).toBe('a');
@@ -37,5 +45,21 @@ describe('time parsing', () => {
     const nextOnly = getCurrentAndNext(items, 8 * 60);
     expect(nextOnly.current).toBeNull();
     expect(nextOnly.next?.id).toBe('a');
+  });
+
+  it('handles overnight itinerary blocks', () => {
+    const overnightItem = {
+      id: 'overnight',
+      title: 'Late ferry',
+      startTime: '23:00',
+      endTime: '01:00',
+      location: 'Port',
+      notes: '',
+      category: 'rest' as const,
+    };
+
+    expect(isNowInItem(overnightItem, 23 * 60 + 30)).toBe(true);
+    expect(isNowInItem(overnightItem, 30)).toBe(true);
+    expect(isNowInItem(overnightItem, 12 * 60)).toBe(false);
   });
 });
