@@ -143,7 +143,7 @@ function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
       const seedDay = seedDaysByDate.get(day.date);
       return {
         ...day,
-        actualMoments: day.actualMoments || seedDay?.actualMoments || [],
+        actualMoments: seedDay?.actualMoments || day.actualMoments || [],
       };
     }),
   };
