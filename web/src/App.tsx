@@ -358,10 +358,6 @@ export function App() {
       .filter((stop): stop is MapStop => Boolean(stop));
   }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
 
-  const selectedStreetViewStop = mapStops[0] || null;
-  const streetViewUrl = selectedStreetViewStop
-    ? `https://www.google.com/maps?q=&layer=c&cbll=${selectedStreetViewStop.lat},${selectedStreetViewStop.lng}`
-    : null;
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
     setUiAlert({ level, message, scope });
@@ -1195,13 +1191,6 @@ export function App() {
             ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
-        {streetViewUrl ? (
-          <p className="map-meta">
-            <a href={streetViewUrl} target="_blank" rel="noreferrer" className="secondary-link">
-              Open Street View for current focus
-            </a>
-          </p>
-        ) : null}
 
         <div className="map-status" role="status" aria-live="polite">
           {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
