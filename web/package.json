@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "actuals:promote": "node ./scripts/promote-actuals-from-inbox.mjs",
+    "actuals:snippets": "node ./scripts/generate-actuals-snippets.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

@@ -1,0 +1,15 @@
+{
+  "promotions": [
+    {
+      "approved": false,
+      "inboxFilename": "replace-with-uploaded-file.jpg",
+      "targetFilename": "2026-03-01-muscat-sunset.jpg",
+      "photoId": "actual-photo-2026-03-01-muscat-sunset",
+      "date": "2026-03-01",
+      "momentId": "actual-2026-03-01-muscat-evening",
+      "alt": "Sunset over Muscat waterfront (shared by Susan/Jim)",
+      "caption": "Muscat waterfront at sunset (shared by Susan/Jim).",
+      "attribution": "Shared by Susan/Jim in B-G-M Fam iMessage thread"
+    }
+  ]
+}
