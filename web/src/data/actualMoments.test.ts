@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getActualMomentsForDate } from './actualMoments';
+import { isVerifiedActualPhotoSrc } from './actualPhotoManifest';
+import { seedTripPlan } from './seedTrip';
 
 describe('actual moments seed data', () => {
   it('returns known moments for Dubai day', () => {
@@ -54,5 +56,22 @@ describe('actual moments seed data', () => {
     const second = getActualMomentsForDate('2026-02-07');
     first[0].photos[0].caption = 'edited';
     expect(second[0].photos[0].caption).not.toBe('edited');
+  });
+
+  it('only uses verified actual photo src entries from the manifest whitelist', () => {
+    const allPhotos = seedTripPlan.days.flatMap((day) => day.actualMoments?.flatMap((moment) => moment.photos) ?? []);
+    expect(allPhotos.length).toBeGreaterThan(0);
+    allPhotos.forEach((photo) => {
+      expect(isVerifiedActualPhotoSrc(photo.src)).toBe(true);
+    });
+  });
+
+  it('keeps explicit alt/caption attribution for each photo', () => {
+    const allPhotos = seedTripPlan.days.flatMap((day) => day.actualMoments?.flatMap((moment) => moment.photos) ?? []);
+    allPhotos.forEach((photo) => {
+      expect(photo.alt.trim().length).toBeGreaterThan(10);
+      expect(photo.caption.trim().length).toBeGreaterThan(10);
+      expect(`${photo.alt} ${photo.caption}`).toMatch(/Susan\/Jim|Susan and Jim/i);
+    });
   });
 });
