@@ -40,14 +40,7 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       source: SOURCE,
       whenLabel: 'Thu, Oman Coast - AM',
       text: 'Extracted message snippet from Jim: The coast of Oman. Arabian Sea.',
-      photos: [
-        {
-          id: 'actual-photo-2026-02-12-jim-coast',
-          src: '/actuals/jim-oman-coast.png',
-          alt: 'Jim on a viewing platform above the Oman coast',
-          caption: 'Jim on the Oman coastal overlook (shared in family thread).',
-        },
-      ],
+      photos: [],
     },
   ],
   '2026-02-13': [
@@ -72,14 +65,7 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       source: SOURCE,
       whenLabel: 'Wed, Feb 18 - PM (Oman)',
       text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman. Shared by Susan and Jim in the family thread.',
-      photos: [
-        {
-          id: 'actual-photo-2026-02-18-family-dinner',
-          src: '/actuals/family-dinner-palms.png',
-          alt: 'Family dinner under palm trees at night in Oman',
-          caption: 'Evening gathering during the Ramadan/iftar part of the Oman leg (photo shared by Susan/Jim).',
-        },
-      ],
+      photos: [],
     },
   ],
 };
