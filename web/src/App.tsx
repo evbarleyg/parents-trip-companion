@@ -700,9 +700,11 @@ export function App() {
 
   useEffect(() => {
     if (!leafletModule || mapStatus !== 'ready' || !mapRef.current || !markerLayerRef.current) return;
-    const L = leafletModule;
 
-    markerLayerRef.current.clearLayers();
+    try {
+      const L = leafletModule;
+
+      markerLayerRef.current.clearLayers();
 
     const bounds = L.latLngBounds([]);
     const todayRegionBounds = L.latLngBounds([]);
@@ -846,7 +848,13 @@ export function App() {
       }
     }
 
-    invalidateMap();
+      invalidateMap();
+    } catch (error) {
+      setMapStatus('error');
+      setMapError((error as Error).message || 'Map interaction failed.');
+      postAlert('error', 'Map failed safely. Use Retry Map to continue.');
+      trackEvent('map_error');
+    }
   }, [
     tripPlan,
     selectedDate,
