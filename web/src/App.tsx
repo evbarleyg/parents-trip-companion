@@ -143,8 +143,15 @@ function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
     timezone: plan.timezone || seed.timezone,
     days: plan.days.map((day) => {
       const seedDay = seedDaysByDate.get(day.date);
+
+      const dayHasCoords = [...day.summaryItems, ...day.detailItems].some(
+        (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
+      );
+
       return {
         ...day,
+        summaryItems: !dayHasCoords && seedDay ? seedDay.summaryItems : day.summaryItems,
+        detailItems: !dayHasCoords && seedDay ? seedDay.detailItems : day.detailItems,
         actualMoments: seedDay?.actualMoments || day.actualMoments || [],
       };
     }),
@@ -301,6 +308,10 @@ export function App() {
     [tripPlan.days, selectedDate],
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
+  const selectedDayHasCoords = useMemo(
+    () => selectedItems.some((item) => typeof item.lat === 'number' && typeof item.lng === 'number'),
+    [selectedItems],
+  );
   const nowAndNext = useMemo(() => getCurrentAndNext(selectedItems), [selectedItems]);
   const regionSegments = useMemo(() => buildRegionSegments(tripPlan.days), [tripPlan.days]);
   const todayDate = useMemo(() => getTodayInTripRange(tripPlan), [tripPlan]);
@@ -389,6 +400,13 @@ export function App() {
       })
       .filter((stop): stop is MapStop => Boolean(stop));
   }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
+
+  useEffect(() => {
+    if (mapScope !== 'day') return;
+    if (selectedDayHasCoords) return;
+    setMapScope('trip');
+    setStatusMessage(`No map coordinates on ${formatDateLabel(selectedDate)}. Switched map to Full Trip.`);
+  }, [mapScope, selectedDayHasCoords, selectedDate]);
 
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
