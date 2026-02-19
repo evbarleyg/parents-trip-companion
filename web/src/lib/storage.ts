@@ -1,7 +1,7 @@
 import type { AppViewTab, MobilePanel, SourceDocument, TripPlan, UnlockResponse, ViewMode } from '../types';
 import { resolveAppViewTab, resolveMobilePanel } from './view-state';
 
-const TRIP_STATE_KEY = 'ptc_trip_plan_v2';
+const TRIP_STATE_KEY = 'ptc_trip_plan_v3';
 const DAY_VIEW_KEY = 'ptc_day_view_modes_v1';
 const SESSION_KEY = 'ptc_session_v1';
 const APP_TAB_KEY = 'ptc_app_tab_v1';
