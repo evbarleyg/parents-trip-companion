@@ -70,7 +70,7 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 };
 
 type MapScope = 'day' | 'trip';
-type MapStyle = 'road' | 'satellite' | 'hybrid';
+type MapStyle = 'road' | 'satellite';
 type LeafletModule = typeof import('leaflet');
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
@@ -81,7 +81,6 @@ const MAP_SCOPE_LABEL: Record<MapScope, string> = {
 const MAP_STYLE_LABEL: Record<MapStyle, string> = {
   road: 'Road',
   satellite: 'Satellite',
-  hybrid: 'Satellite + Streets',
 };
 
 interface RegionSegment {
@@ -271,7 +270,6 @@ export function App() {
   const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
   const roadTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const satelliteTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
-  const streetOverlayTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
@@ -342,6 +340,10 @@ export function App() {
       .filter((stop): stop is MapStop => Boolean(stop));
   }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
 
+  const selectedStreetViewStop = mapStops[0] || null;
+  const streetViewUrl = selectedStreetViewStop
+    ? `https://www.google.com/maps?q=&layer=c&cbll=${selectedStreetViewStop.lat},${selectedStreetViewStop.lng}`
+    : null;
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
     setUiAlert({ level, message, scope });
@@ -523,20 +525,12 @@ export function App() {
             attribution: 'Tiles &copy; Esri',
           },
         );
-        const streetOverlayLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '&copy; OpenStreetMap contributors',
-          opacity: 0.35,
-        });
 
         roadTileLayerRef.current = roadLayer;
         satelliteTileLayerRef.current = satelliteLayer;
-        streetOverlayTileLayerRef.current = streetOverlayLayer;
 
         if (mapStyle === 'satellite') {
           satelliteLayer.addTo(map);
-        } else if (mapStyle === 'hybrid') {
-          satelliteLayer.addTo(map);
-          streetOverlayLayer.addTo(map);
         } else {
           roadLayer.addTo(map);
         }
@@ -574,7 +568,6 @@ export function App() {
       markerLayerRef.current = null;
       roadTileLayerRef.current = null;
       satelliteTileLayerRef.current = null;
-      streetOverlayTileLayerRef.current = null;
     };
   }, [leafletModule, mapMountVersion, invalidateMap]);
 
@@ -584,24 +577,15 @@ export function App() {
     const map = mapRef.current;
     const road = roadTileLayerRef.current;
     const satellite = satelliteTileLayerRef.current;
-    const overlay = streetOverlayTileLayerRef.current;
 
-    if (!road || !satellite || !overlay) return;
+    if (!road || !satellite) return;
 
-    if (mapStyle === 'road') {
-      if (!map.hasLayer(road)) map.addLayer(road);
+    if (mapStyle === 'satellite') {
+      if (map.hasLayer(road)) map.removeLayer(road);
+      if (!map.hasLayer(satellite)) map.addLayer(satellite);
+    } else {
       if (map.hasLayer(satellite)) map.removeLayer(satellite);
-      if (map.hasLayer(overlay)) map.removeLayer(overlay);
-      return;
-    }
-
-    if (map.hasLayer(road)) map.removeLayer(road);
-    if (!map.hasLayer(satellite)) map.addLayer(satellite);
-
-    if (mapStyle === 'hybrid') {
-      if (!map.hasLayer(overlay)) map.addLayer(overlay);
-    } else if (map.hasLayer(overlay)) {
-      map.removeLayer(overlay);
+      if (!map.hasLayer(road)) map.addLayer(road);
     }
   }, [mapStatus, mapStyle]);
 
@@ -1185,6 +1169,13 @@ export function App() {
             ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
+        {streetViewUrl ? (
+          <p className="map-meta">
+            <a href={streetViewUrl} target="_blank" rel="noreferrer" className="secondary-link">
+              Open Street View for current focus
+            </a>
+          </p>
+        ) : null}
 
         <div className="map-status" role="status" aria-live="polite">
           {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
