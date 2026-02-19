@@ -1,6 +1,6 @@
 import type { AppViewTab, MobilePanel } from '../types';
 
-export const APP_VIEW_TABS: AppViewTab[] = ['trip_overview', 'day_detail'];
+export const APP_VIEW_TABS: AppViewTab[] = ['trip_overview', 'day_detail', 'photo_gallery'];
 export const MOBILE_PANELS: MobilePanel[] = ['now', 'map', 'plan', 'recs'];
 
 export function resolveAppViewTab(value: string | null | undefined, fallback: AppViewTab = 'day_detail'): AppViewTab {

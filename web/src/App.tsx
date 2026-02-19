@@ -7,6 +7,7 @@ import {
   getNearbyRecommendations,
   unlockPasscode,
 } from './lib/api';
+import { VERIFIED_ACTUAL_PHOTO_SRCS } from './data/actualPhotoManifest';
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
 import { formatDateLabel, slugify, toInputClock } from './lib/format';
 import { getTodayInTripRange } from './lib/date';
@@ -60,6 +61,7 @@ const CATEGORY_LABEL: Record<RecCategory, string> = {
 const APP_TAB_LABEL: Record<AppViewTab, string> = {
   trip_overview: 'Trip Overview',
   day_detail: 'Day Detail',
+  photo_gallery: 'Photo Gallery',
 };
 
 const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
@@ -325,6 +327,36 @@ export function App() {
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
   );
+
+  const photoGalleryRows = useMemo(() => {
+    const mapped = tripPlan.days.flatMap((day) =>
+      (day.actualMoments || []).flatMap((moment) =>
+        moment.photos.map((photo) => ({
+          src: photo.src,
+          caption: photo.caption,
+          alt: photo.alt,
+          date: day.date,
+          region: day.region,
+          moment: moment.whenLabel,
+        })),
+      ),
+    );
+
+    const mappedBySrc = new Map(mapped.map((row) => [row.src, row]));
+
+    return VERIFIED_ACTUAL_PHOTO_SRCS.map((src) => {
+      const match = mappedBySrc.get(src);
+      return {
+        src,
+        date: match?.date || 'UNMAPPED',
+        region: match?.region || 'Unmapped',
+        moment: match?.moment || 'Unmapped',
+        caption: match?.caption || 'No caption mapped',
+        alt: match?.alt || 'No alt mapped',
+        mapped: Boolean(match),
+      };
+    });
+  }, [tripPlan.days]);
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (mapScope === 'day') {
@@ -1246,6 +1278,31 @@ export function App() {
     );
   }
 
+  function renderPhotoGalleryCard(className = '') {
+    return (
+      <section className={`card ${className}`.trim()}>
+        <h2>Photo Debug Gallery</h2>
+        <p className="hint">All whitelisted photos, including unmapped ones, with current date/region/caption bindings.</p>
+        <p className="hint">
+          Total: {photoGalleryRows.length} | Mapped: {photoGalleryRows.filter((row) => row.mapped).length} | Unmapped:{' '}
+          {photoGalleryRows.filter((row) => !row.mapped).length}
+        </p>
+        <ul className="actual-photo-grid">
+          {photoGalleryRows.map((row) => (
+            <li key={row.src} className="actual-photo-card gallery-card">
+              <img src={toPublicAssetUrl(row.src)} alt={row.alt} loading="lazy" />
+              <figcaption>
+                <div><strong>{row.date}</strong> · {row.region}</div>
+                <div>{row.moment}</div>
+                <div>{row.caption}</div>
+              </figcaption>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
   return (
     <main className="layout">
       <a className="skip-link" href="#primary-content">
@@ -1270,7 +1327,7 @@ export function App() {
 
       <section className="title-toolbar" aria-label="Trip controls">
         <nav className="toolbar-tabs" aria-label="Primary view tabs">
-          {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
+          {(['trip_overview', 'day_detail', 'photo_gallery'] as AppViewTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1513,6 +1570,10 @@ export function App() {
             ) : null}
           </article>
           </section>
+          </>
+        ) : activeAppTab === 'photo_gallery' ? (
+          <>
+            {renderPhotoGalleryCard()}
           </>
         ) : (
           <>
