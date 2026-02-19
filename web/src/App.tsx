@@ -1380,6 +1380,8 @@ export function App() {
 
       <section id="primary-content">
         {activeAppTab === 'trip_overview' ? (
+          <>
+          {renderMapCard(panelHiddenClass('map'))}
           <section className="trip-overview-grid">
           <article className="card">
             <h2>Trip Timeline</h2>
@@ -1466,6 +1468,7 @@ export function App() {
             </ul>
           </article>
           </section>
+          </>
         ) : (
           <>
           {isMobile ? (
@@ -1731,7 +1734,6 @@ export function App() {
           </>
         )}
 
-        {activeAppTab === 'trip_overview' ? renderMapCard(panelHiddenClass('map')) : null}
       </section>
 
       <footer className="status-row">
