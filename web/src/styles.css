@@ -595,6 +595,13 @@ a:focus-visible {
   gap: 8px;
 }
 
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
 .region-row {
   border: 1px solid #d4dce4;
   border-radius: 10px;

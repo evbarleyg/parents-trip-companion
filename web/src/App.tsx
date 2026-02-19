@@ -239,6 +239,10 @@ export function App() {
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
   const [mapScope, setMapScope] = useState<MapScope>(() => (initialAppTab === 'trip_overview' ? 'trip' : 'day'));
   const [mapStyle, setMapStyle] = useState<MapStyle>('road');
+  const [overviewPanelsCollapsed, setOverviewPanelsCollapsed] = useState({
+    timeline: true,
+    regions: true,
+  });
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -1384,7 +1388,23 @@ export function App() {
           {renderMapCard(panelHiddenClass('map'))}
           <section className="trip-overview-grid">
           <article className="card">
-            <h2>Trip Timeline</h2>
+            <div className="card-header-row">
+              <h2>Trip Timeline</h2>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() =>
+                  setOverviewPanelsCollapsed((prev) => ({
+                    ...prev,
+                    timeline: !prev.timeline,
+                  }))
+                }
+              >
+                {overviewPanelsCollapsed.timeline ? 'Expand' : 'Collapse'}
+              </button>
+            </div>
+            {!overviewPanelsCollapsed.timeline ? (
+              <>
             <p>Jump by date or region. The map shows the full trip path.</p>
             <div className="row">
               <label htmlFor="overview-day-select">Date jump</label>
@@ -1435,10 +1455,28 @@ export function App() {
                 </li>
               ))}
             </ul>
+              </>
+            ) : null}
           </article>
 
           <article className="card">
-            <h2>Region Legs</h2>
+            <div className="card-header-row">
+              <h2>Region Legs</h2>
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() =>
+                  setOverviewPanelsCollapsed((prev) => ({
+                    ...prev,
+                    regions: !prev.regions,
+                  }))
+                }
+              >
+                {overviewPanelsCollapsed.regions ? 'Expand' : 'Collapse'}
+              </button>
+            </div>
+            {!overviewPanelsCollapsed.regions ? (
+              <>
             <ul className="region-overview-list">
               {regionSegments.map((segment) => (
                 <li
@@ -1466,6 +1504,8 @@ export function App() {
                 </li>
               ))}
             </ul>
+              </>
+            ) : null}
           </article>
           </section>
           </>
