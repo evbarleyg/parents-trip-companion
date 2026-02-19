@@ -17,7 +17,7 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       id: 'actual-2026-02-07-dubai-mall',
       source: SOURCE,
       whenLabel: 'Sat, Feb 7 - AM',
-      text: 'Extracted message snippet: Jim at the Dubai Mall. We are in search of a beer. Photo set shared into the family thread by Susan/Jim.'
+      text: 'Extracted message snippet: Jim at the Dubai Mall. We are in search of a beer. Photo set shared into the family thread by Susan/Jim.',
       photos: [
         {
           id: 'actual-photo-2026-02-07-mall',
