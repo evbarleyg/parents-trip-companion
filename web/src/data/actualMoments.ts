@@ -111,7 +111,7 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       id: 'actual-2026-02-18-ramadan-iftar',
       source: SOURCE,
       whenLabel: 'Wed, Feb 18 - PM (Oman)',
-      text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman. Shared by Susan and Jim in the family thread.'
+      text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman. Shared by Susan and Jim in the family thread.',
       photos: [
         {
           id: 'actual-photo-2026-02-18-family-dinner',
