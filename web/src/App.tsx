@@ -286,8 +286,16 @@ export function App() {
   const lastViewportFitKeyRef = useRef<string | null>(null);
   const recommendationCacheRef = useRef<Record<string, RecommendationItem[]>>({});
 
+  const selectedDateExists = useMemo(
+    () => tripPlan.days.some((day) => day.date === selectedDate),
+    [tripPlan.days, selectedDate],
+  );
+
   const selectedDay = useMemo(
-    () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0] || seedTripPlan.days[0],
+    () =>
+      tripPlan.days.find((day) => day.date === selectedDate) ||
+      tripPlan.days[0] ||
+      seedTripPlan.days[0],
     [tripPlan.days, selectedDate],
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
@@ -418,6 +426,14 @@ export function App() {
   useEffect(() => {
     saveTripPlanState(tripPlan);
   }, [tripPlan]);
+
+  useEffect(() => {
+    if (selectedDateExists) return;
+    const fallbackDate = tripPlan.days[0]?.date;
+    if (fallbackDate) {
+      setSelectedDate(fallbackDate);
+    }
+  }, [selectedDateExists, tripPlan.days]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
