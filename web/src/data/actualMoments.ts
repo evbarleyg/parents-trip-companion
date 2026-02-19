@@ -247,8 +247,15 @@ const VERIFIED_PHOTO_MANIFEST: Record<string, TripActualPhoto> = {
 
 const ALLOWED_MOMENT_PHOTO_IDS: Record<string, string[]> = {
   'actual-2026-02-07-dubai-mall': ['actual-photo-2026-02-07-mall', 'actual-photo-2026-02-07-mojito'],
+  'actual-2026-02-12-photo-batch': ['actual-photo-batch-002-img-1126-2', 'actual-photo-batch-003-img-1126', 'actual-photo-batch-004-img-1128', 'actual-photo-batch-005-img-1130', 'actual-photo-batch-006-img-1135', 'actual-photo-batch-007-img-1139'],
   'actual-2026-02-13-camels': ['actual-photo-2026-02-13-camel-milk'],
-  'actual-2026-02-24-photo-batch': ['actual-photo-batch-001-79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652', 'actual-photo-batch-002-img-1126-2', 'actual-photo-batch-003-img-1126', 'actual-photo-batch-004-img-1128', 'actual-photo-batch-005-img-1130', 'actual-photo-batch-006-img-1135', 'actual-photo-batch-007-img-1139', 'actual-photo-batch-008-img-1145', 'actual-photo-batch-009-img-1150', 'actual-photo-batch-010-img-1152', 'actual-photo-batch-011-img-1154', 'actual-photo-batch-012-img-1156', 'actual-photo-batch-013-img-1168', 'actual-photo-batch-014-img-1169', 'actual-photo-batch-015-img-1172', 'actual-photo-batch-016-img-1187', 'actual-photo-batch-017-img-1190', 'actual-photo-batch-018-img-1192', 'actual-photo-batch-019-img-1197', 'actual-photo-batch-020-img-1198', 'actual-photo-batch-021-img-1200', 'actual-photo-batch-022-img-1210', 'actual-photo-batch-023-img-1216', 'actual-photo-batch-024-img-1231', 'actual-photo-batch-025-img-1232', 'actual-photo-batch-026-img-1233', 'actual-photo-batch-027-img-1234', 'actual-photo-batch-028-img-1238', 'actual-photo-batch-029-img-1239', 'actual-photo-batch-030-img-1241', 'actual-photo-batch-031-img-1243', 'actual-photo-batch-032-img-1244', 'actual-photo-batch-033-img-1253', 'actual-photo-batch-034-img-3024', 'actual-photo-batch-035-img-4017', 'actual-photo-batch-036-img-4024', 'actual-photo-batch-037-img-4041'],
+  'actual-2026-02-13-photo-batch': ['actual-photo-batch-008-img-1145', 'actual-photo-batch-009-img-1150', 'actual-photo-batch-010-img-1152', 'actual-photo-batch-011-img-1154', 'actual-photo-batch-012-img-1156', 'actual-photo-batch-013-img-1168', 'actual-photo-batch-014-img-1169', 'actual-photo-batch-015-img-1172', 'actual-photo-batch-035-img-4017', 'actual-photo-batch-036-img-4024', 'actual-photo-batch-037-img-4041'],
+  'actual-2026-02-14-photo-batch': ['actual-photo-batch-016-img-1187'],
+  'actual-2026-02-15-photo-batch': ['actual-photo-batch-017-img-1190', 'actual-photo-batch-018-img-1192', 'actual-photo-batch-019-img-1197', 'actual-photo-batch-020-img-1198'],
+  'actual-2026-02-16-photo-batch': ['actual-photo-batch-021-img-1200', 'actual-photo-batch-022-img-1210', 'actual-photo-batch-023-img-1216'],
+  'actual-2026-02-17-photo-batch': ['actual-photo-batch-001-79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652', 'actual-photo-batch-024-img-1231', 'actual-photo-batch-026-img-1233', 'actual-photo-batch-027-img-1234', 'actual-photo-batch-028-img-1238', 'actual-photo-batch-029-img-1239', 'actual-photo-batch-034-img-3024'],
+  'actual-2026-02-18-photo-batch': ['actual-photo-batch-030-img-1241', 'actual-photo-batch-031-img-1243', 'actual-photo-batch-032-img-1244', 'actual-photo-batch-033-img-1253'],
+  'actual-2026-02-24-photo-batch': ['actual-photo-batch-025-img-1232'],
 };
 
 function sanitizeMomentPhotos(moment: TripActualMoment): TripActualPhoto[] {
@@ -281,6 +288,7 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
         { id: 'actual-photo-2026-02-07-mojito', src: '', alt: '', caption: '' },
       ],
     },
+
   ],
   '2026-02-12': [
     {
@@ -289,6 +297,20 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       whenLabel: 'Thu, Oman Coast - AM',
       text: 'Extracted message snippet from Jim: The coast of Oman. Arabian Sea.',
       photos: [],
+    },
+    {
+      id: 'actual-2026-02-12-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-12 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-12).',
+      photos: [
+        { id: 'actual-photo-batch-002-img-1126-2', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-003-img-1126', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-004-img-1128', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-005-img-1130', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-006-img-1135', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-007-img-1139', src: '', alt: '', caption: '' },
+      ],
     },
   ],
   '2026-02-13': [
@@ -299,6 +321,25 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       text: 'Extracted message snippet: I milked a camel and we drank the milk. Quite good.',
       photos: [{ id: 'actual-photo-2026-02-13-camel-milk', src: '', alt: '', caption: '' }],
     },
+    {
+      id: 'actual-2026-02-13-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-13 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-13).',
+      photos: [
+        { id: 'actual-photo-batch-008-img-1145', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-009-img-1150', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-010-img-1152', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-011-img-1154', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-012-img-1156', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-013-img-1168', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-014-img-1169', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-015-img-1172', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-035-img-4017', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-036-img-4024', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-037-img-4041', src: '', alt: '', caption: '' },
+      ],
+    },
   ],
   '2026-02-18': [
     {
@@ -308,51 +349,82 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman. Shared by Susan and Jim in the family thread.',
       photos: [],
     },
+    {
+      id: 'actual-2026-02-18-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-18 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-18).',
+      photos: [
+        { id: 'actual-photo-batch-030-img-1241', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-031-img-1243', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-032-img-1244', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-033-img-1253', src: '', alt: '', caption: '' },
+      ],
+    },
   ],
   '2026-02-24': [
     {
       id: 'actual-2026-02-24-photo-batch',
       source: SOURCE,
-      whenLabel: 'Trip photo batch (date assignment pending)',
-      text: 'Additional family-thread photos were imported and are temporarily grouped here until exact day-level placement is finalized.',
+      whenLabel: '2026-02-24 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-24).',
       photos: [
-        { id: 'actual-photo-batch-001-79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-002-img-1126-2', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-003-img-1126', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-004-img-1128', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-005-img-1130', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-006-img-1135', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-007-img-1139', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-008-img-1145', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-009-img-1150', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-010-img-1152', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-011-img-1154', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-012-img-1156', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-013-img-1168', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-014-img-1169', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-015-img-1172', src: '', alt: '', caption: '' },
+        { id: 'actual-photo-batch-025-img-1232', src: '', alt: '', caption: '' },
+      ],
+    },
+  ],
+  '2026-02-14': [
+    {
+      id: 'actual-2026-02-14-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-14 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-14).',
+      photos: [
         { id: 'actual-photo-batch-016-img-1187', src: '', alt: '', caption: '' },
+      ],
+    },
+  ],
+  '2026-02-15': [
+    {
+      id: 'actual-2026-02-15-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-15 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-15).',
+      photos: [
         { id: 'actual-photo-batch-017-img-1190', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-018-img-1192', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-019-img-1197', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-020-img-1198', src: '', alt: '', caption: '' },
+      ],
+    },
+  ],
+  '2026-02-16': [
+    {
+      id: 'actual-2026-02-16-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-16 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-16).',
+      photos: [
         { id: 'actual-photo-batch-021-img-1200', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-022-img-1210', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-023-img-1216', src: '', alt: '', caption: '' },
+      ],
+    },
+  ],
+  '2026-02-17': [
+    {
+      id: 'actual-2026-02-17-photo-batch',
+      source: SOURCE,
+      whenLabel: '2026-02-17 - Imported photo set',
+      text: 'Imported family-thread photos grouped by EXIF capture date (2026-02-17).',
+      photos: [
+        { id: 'actual-photo-batch-001-79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-024-img-1231', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-025-img-1232', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-026-img-1233', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-027-img-1234', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-028-img-1238', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-029-img-1239', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-030-img-1241', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-031-img-1243', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-032-img-1244', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-033-img-1253', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-034-img-3024', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-035-img-4017', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-036-img-4024', src: '', alt: '', caption: '' },
-        { id: 'actual-photo-batch-037-img-4041', src: '', alt: '', caption: '' },
       ],
     },
   ],
