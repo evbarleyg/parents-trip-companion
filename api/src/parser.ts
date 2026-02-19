@@ -105,6 +105,8 @@ function localTripPatchFromText(text: string): { patch: TripPatch; warnings: str
       return;
     }
 
+    const date = activeDate;
+
     const detailItems = cleanedLines.map((line, idx) => {
       const title = line
         .replace(/^[-•*]\s*/, '')
@@ -113,7 +115,7 @@ function localTripPatchFromText(text: string): { patch: TripPatch; warnings: str
         .trim();
 
       return makeItem(
-        activeDate,
+        date,
         (title || line).slice(0, 140),
         location || 'TBD',
         line,
