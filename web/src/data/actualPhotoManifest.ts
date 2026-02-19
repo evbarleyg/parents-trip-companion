@@ -44,6 +44,7 @@ export const VERIFIED_ACTUAL_PHOTO_FILENAMES = [
   'oman-camel-milk.png',
   'oman-camels.png',
   'oman-coast-arabian-sea.png',
+  'susan-2026-02-19-jebel-akhdar-panorama.jpg',
 ] as const;
 
 export const VERIFIED_ACTUAL_PHOTO_SRCS = VERIFIED_ACTUAL_PHOTO_FILENAMES.map(

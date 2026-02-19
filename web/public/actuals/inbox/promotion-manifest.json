@@ -406,6 +406,17 @@
       "alt": "Trip photo (IMG_4041.jpeg) shared by Susan/Jim",
       "caption": "Family trip photo shared by Susan/Jim (IMG_4041.jpeg).",
       "attribution": "Shared by Susan/Jim in B-G-M Fam iMessage thread"
+    },
+    {
+      "approved": true,
+      "inboxFilename": "file_8---8ea48b01-f8d2-4734-ae5f-0db5a1ca7fc4.jpg",
+      "targetFilename": "susan-2026-02-19-jebel-akhdar-panorama.jpg",
+      "photoId": "actual-photo-2026-02-19-susan-panorama",
+      "date": "2026-02-19",
+      "momentId": "actual-2026-02-19-photo-batch",
+      "alt": "Panoramic mountain and palm valley view in Jebel Akhdar shared by Susan",
+      "caption": "Jebel Akhdar panoramic valley view shared by Susan on Feb 19.",
+      "attribution": "Shared by Susan in B-G-M Fam iMessage thread"
     }
   ]
 }

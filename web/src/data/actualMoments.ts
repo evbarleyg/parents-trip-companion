@@ -237,6 +237,12 @@ const VERIFIED_PHOTO_MANIFEST: Record<string, TripActualPhoto> = {
     alt: 'Trip photo (IMG_4041.jpeg) shared by Susan/Jim',
     caption: 'Family trip photo shared by Susan/Jim (IMG_4041.jpeg).',
   },
+  'actual-photo-2026-02-19-susan-panorama': {
+    id: 'actual-photo-2026-02-19-susan-panorama',
+    src: '/actuals/susan-2026-02-19-jebel-akhdar-panorama.jpg',
+    alt: 'Panoramic mountain and palm valley view in Jebel Akhdar shared by Susan',
+    caption: 'Jebel Akhdar panoramic valley view shared by Susan on Feb 19.',
+  },
 };
 
 const ALLOWED_MOMENT_PHOTO_IDS: Record<string, string[]> = {
@@ -249,6 +255,7 @@ const ALLOWED_MOMENT_PHOTO_IDS: Record<string, string[]> = {
   'actual-2026-02-16-photo-batch': ['actual-photo-batch-021-img-1200', 'actual-photo-batch-022-img-1210', 'actual-photo-batch-023-img-1216'],
   'actual-2026-02-17-photo-batch': ['actual-photo-batch-001-79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652', 'actual-photo-batch-024-img-1231', 'actual-photo-batch-026-img-1233', 'actual-photo-batch-027-img-1234', 'actual-photo-batch-028-img-1238', 'actual-photo-batch-029-img-1239', 'actual-photo-batch-034-img-3024'],
   'actual-2026-02-18-photo-batch': ['actual-photo-batch-030-img-1241', 'actual-photo-batch-031-img-1243', 'actual-photo-batch-032-img-1244', 'actual-photo-batch-033-img-1253'],
+  'actual-2026-02-19-photo-batch': ['actual-photo-2026-02-19-susan-panorama'],
 };
 
 function sanitizeMomentPhotos(moment: TripActualMoment): TripActualPhoto[] {
@@ -352,6 +359,17 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
         { id: 'actual-photo-batch-031-img-1243', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-032-img-1244', src: '', alt: '', caption: '' },
         { id: 'actual-photo-batch-033-img-1253', src: '', alt: '', caption: '' },
+      ],
+    },
+  ],
+  '2026-02-19': [
+    {
+      id: 'actual-2026-02-19-photo-batch',
+      source: SOURCE,
+      whenLabel: 'Thu, Feb 19 - Jebel Akhdar (Susan)',
+      text: 'New panoramic mountain valley photo shared by Susan on Feb 19.',
+      photos: [
+        { id: 'actual-photo-2026-02-19-susan-panorama', src: '', alt: '', caption: '' },
       ],
     },
   ],
