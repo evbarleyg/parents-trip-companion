@@ -218,7 +218,13 @@ export function App() {
     const restored = loadTripPlanState();
     const viewModes = loadDayViewModes();
     const basePlan = restored ? hydratePlanWithSeedData(restored, seedPlan) : seedPlan;
-    return applyStoredViewModes(basePlan, viewModes);
+    const hydrated = applyStoredViewModes(basePlan, viewModes);
+
+    if (!Array.isArray(hydrated.days) || hydrated.days.length === 0) {
+      return seedPlan;
+    }
+
+    return hydrated;
   }, []);
 
   const [tripPlan, setTripPlan] = useState<TripPlan>(initialPlan || seedTripPlan);
@@ -277,7 +283,7 @@ export function App() {
   const recommendationCacheRef = useRef<Record<string, RecommendationItem[]>>({});
 
   const selectedDay = useMemo(
-    () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
+    () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0] || seedTripPlan.days[0],
     [tripPlan.days, selectedDate],
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
