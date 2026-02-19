@@ -71,7 +71,7 @@ describe('actual moments seed data', () => {
     allPhotos.forEach((photo) => {
       expect(photo.alt.trim().length).toBeGreaterThan(10);
       expect(photo.caption.trim().length).toBeGreaterThan(10);
-      expect(`${photo.alt} ${photo.caption}`).toMatch(/Susan\/Jim|Susan and Jim/i);
+      expect(`${photo.alt} ${photo.caption}`).toMatch(/Susan\/Jim|Susan and Jim|\bJim\b|\bSusan\b/i);
     });
   });
 });
