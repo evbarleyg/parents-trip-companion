@@ -70,11 +70,17 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 };
 
 type MapScope = 'day' | 'trip';
+type MapStyle = 'road' | 'satellite';
 type LeafletModule = typeof import('leaflet');
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
   day: 'Selected Day',
   trip: 'Full Trip',
+};
+
+const MAP_STYLE_LABEL: Record<MapStyle, string> = {
+  road: 'Road',
+  satellite: 'Satellite',
 };
 
 interface RegionSegment {
@@ -226,6 +232,7 @@ export function App() {
   const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(initialAppTab);
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
   const [mapScope, setMapScope] = useState<MapScope>(() => (initialAppTab === 'trip_overview' ? 'trip' : 'day'));
+  const [mapStyle, setMapStyle] = useState<MapStyle>('road');
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -261,6 +268,8 @@ export function App() {
 
   const mapRef = useRef<Leaflet.Map | null>(null);
   const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const roadTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
+  const satelliteTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
@@ -330,6 +339,11 @@ export function App() {
       })
       .filter((stop): stop is MapStop => Boolean(stop));
   }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
+
+  const selectedStreetViewStop = mapStops[0] || null;
+  const streetViewUrl = selectedStreetViewStop
+    ? `https://www.google.com/maps?q=&layer=c&cbll=${selectedStreetViewStop.lat},${selectedStreetViewStop.lng}`
+    : null;
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
     setUiAlert({ level, message, scope });
@@ -502,9 +516,24 @@ export function App() {
           preferCanvas: true,
         }).setView([26, 20], 3);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const roadLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors',
-        }).addTo(map);
+        });
+        const satelliteLayer = L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          {
+            attribution: 'Tiles &copy; Esri',
+          },
+        );
+
+        roadTileLayerRef.current = roadLayer;
+        satelliteTileLayerRef.current = satelliteLayer;
+
+        if (mapStyle === 'satellite') {
+          satelliteLayer.addTo(map);
+        } else {
+          roadLayer.addTo(map);
+        }
 
         const markerLayer = L.layerGroup().addTo(map);
         mapRef.current = map;
@@ -537,8 +566,28 @@ export function App() {
 
       mapRef.current = null;
       markerLayerRef.current = null;
+      roadTileLayerRef.current = null;
+      satelliteTileLayerRef.current = null;
     };
   }, [leafletModule, mapMountVersion, invalidateMap]);
+
+  useEffect(() => {
+    if (mapStatus !== 'ready' || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const road = roadTileLayerRef.current;
+    const satellite = satelliteTileLayerRef.current;
+
+    if (!road || !satellite) return;
+
+    if (mapStyle === 'satellite') {
+      if (map.hasLayer(road)) map.removeLayer(road);
+      if (!map.hasLayer(satellite)) map.addLayer(satellite);
+    } else {
+      if (map.hasLayer(satellite)) map.removeLayer(satellite);
+      if (!map.hasLayer(road)) map.addLayer(road);
+    }
+  }, [mapStatus, mapStyle]);
 
   useEffect(() => {
     if (mapStatus !== 'ready') return;
@@ -1102,11 +1151,31 @@ export function App() {
             </button>
           ))}
         </div>
+        <div className="map-scope-toggle" role="group" aria-label="Map style">
+          {(['road', 'satellite'] as MapStyle[]).map((style) => (
+            <button
+              key={style}
+              type="button"
+              className={mapStyle === style ? 'active' : ''}
+              onClick={() => setMapStyle(style)}
+              aria-pressed={mapStyle === style}
+            >
+              {MAP_STYLE_LABEL[style]}
+            </button>
+          ))}
+        </div>
         <p className="map-meta">
           {mapScope === 'trip'
             ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
+        {streetViewUrl ? (
+          <p className="map-meta">
+            <a href={streetViewUrl} target="_blank" rel="noreferrer" className="secondary-link">
+              Open Street View for current focus
+            </a>
+          </p>
+        ) : null}
 
         <div className="map-status" role="status" aria-live="polite">
           {mapStatus === 'initializing' ? <span>Loading map...</span> : null}

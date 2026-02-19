@@ -693,6 +693,12 @@ a:focus-visible {
   margin-bottom: 8px;
 }
 
+.secondary-link {
+  color: #1f5f8b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .map-error {
   margin-bottom: 8px;
   border: 1px solid #e1b4b4;
