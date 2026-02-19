@@ -105,6 +105,15 @@ function regionColor(region: string): string {
   return '#365e8d';
 }
 
+function toPublicAssetUrl(path: string): string {
+  if (!path) return path;
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
+  const normalized = path.replace(/^\/+/, '');
+  return `${base}/${normalized}`;
+}
+
 function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode>): TripPlan {
   return {
     ...plan,
@@ -1062,7 +1071,7 @@ export function App() {
                   <div className="actual-photo-grid">
                     {moment.photos.map((photo) => (
                       <figure key={photo.id} className="actual-photo-card">
-                        <img src={photo.src} alt={photo.alt} loading="lazy" />
+                        <img src={toPublicAssetUrl(photo.src)} alt={photo.alt} loading="lazy" />
                         <figcaption>{photo.caption}</figcaption>
                       </figure>
                     ))}
