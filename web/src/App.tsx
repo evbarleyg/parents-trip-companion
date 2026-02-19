@@ -293,6 +293,7 @@ export function App() {
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
   const lastViewportFitKeyRef = useRef<string | null>(null);
+  const previousAppTabRef = useRef<AppViewTab | null>(null);
   const recommendationCacheRef = useRef<Record<string, RecommendationItem[]>>({});
 
   const selectedDateExists = useMemo(
@@ -430,6 +431,25 @@ export function App() {
     saveAppViewTab(tab);
     setMapScope(tab === 'trip_overview' ? 'trip' : 'day');
   }
+
+  useEffect(() => {
+    const prev = previousAppTabRef.current;
+    previousAppTabRef.current = activeAppTab;
+
+    if (!prev || prev === activeAppTab) return;
+
+    const movedAcrossGalleryBoundary =
+      (prev === 'photo_gallery' && activeAppTab !== 'photo_gallery') ||
+      (prev !== 'photo_gallery' && activeAppTab === 'photo_gallery');
+
+    if (!movedAcrossGalleryBoundary) return;
+
+    setMapError(null);
+    setMapStatus('initializing');
+    hasAppliedInitialRegionLockRef.current = false;
+    lastViewportFitKeyRef.current = null;
+    setMapMountVersion((v) => v + 1);
+  }, [activeAppTab]);
 
   function setMobilePanel(panel: MobilePanel) {
     setActiveMobilePanelState(panel);
