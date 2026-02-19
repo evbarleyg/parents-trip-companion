@@ -33,39 +33,19 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
         },
       ],
     },
-    {
-      id: 'actual-2026-02-07-waterfront',
-      source: SOURCE,
-      whenLabel: 'Sat, Feb 7 - Afternoon',
-      text: 'Dubai waterfront photo shared in the family thread.',
-      photos: [
-        {
-          id: 'actual-photo-2026-02-07-wheel',
-          src: '/actuals/dubai-wheel.png',
-          alt: 'Dubai waterfront with giant observation wheel and pool foreground',
-          caption: 'Dubai waterfront and skyline.',
-        },
-      ],
-    },
   ],
   '2026-02-12': [
     {
       id: 'actual-2026-02-12-oman-coast',
       source: SOURCE,
       whenLabel: 'Thu, Oman Coast - AM',
-      text: 'Extracted message snippet: The coast of Oman. Arabian Sea.',
+      text: 'Extracted message snippet from Jim: The coast of Oman. Arabian Sea.',
       photos: [
-        {
-          id: 'actual-photo-2026-02-12-coast',
-          src: '/actuals/oman-coast-arabian-sea.png',
-          alt: 'Rocky Omani coastline along the Arabian Sea',
-          caption: 'Coast of Oman, Arabian Sea.',
-        },
         {
           id: 'actual-photo-2026-02-12-jim-coast',
           src: '/actuals/jim-oman-coast.png',
           alt: 'Jim on a viewing platform above the Oman coast',
-          caption: 'Jim on the Oman coastal overlook.',
+          caption: 'Jim on the Oman coastal overlook (shared in family thread).',
         },
       ],
     },
@@ -78,30 +58,10 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       text: 'Extracted message snippet: I milked a camel and we drank the milk. Quite good.',
       photos: [
         {
-          id: 'actual-photo-2026-02-13-camels',
-          src: '/actuals/oman-camels.png',
-          alt: 'Camels in an enclosure in Oman',
-          caption: 'Camel stop in Oman.',
-        },
-        {
           id: 'actual-photo-2026-02-13-camel-milk',
           src: '/actuals/oman-camel-milk.png',
           alt: 'Susan and travel group near a large bowl of camel milk',
-          caption: 'Camel milk tasting moment.',
-        },
-      ],
-    },
-    {
-      id: 'actual-2026-02-13-sunset',
-      source: SOURCE,
-      whenLabel: 'Fri, Sunset',
-      text: 'Sunset photo shared in the same Oman leg thread.',
-      photos: [
-        {
-          id: 'actual-photo-2026-02-13-sunset',
-          src: '/actuals/desert-sunset.png',
-          alt: 'Sunset over desert coastline with old stone buildings',
-          caption: 'Sunset close of day in Oman.',
+          caption: 'Camel milk tasting moment with Susan (shared in family thread).',
         },
       ],
     },
@@ -118,22 +78,6 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
           src: '/actuals/family-dinner-palms.png',
           alt: 'Family dinner under palm trees at night in Oman',
           caption: 'Evening gathering during the Ramadan/iftar part of the Oman leg (photo shared by Susan/Jim).',
-        },
-      ],
-    },
-  ],
-  '2026-02-24': [
-    {
-      id: 'actual-2026-02-24-maldives',
-      source: SOURCE,
-      whenLabel: 'Maldives Resort Day',
-      text: 'Beachfront lunch photo from the family thread during the resort window.',
-      photos: [
-        {
-          id: 'actual-photo-2026-02-24-lunch',
-          src: '/actuals/maldives-beach-lunch.png',
-          alt: 'Cold drink on a beachside table at Maldives resort',
-          caption: 'Resort lunch by the water.',
         },
       ],
     },
