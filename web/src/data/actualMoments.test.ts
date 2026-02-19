@@ -32,9 +32,26 @@ describe('actual moments seed data', () => {
     expect(getActualMomentsForDate('2026-03-25')).toEqual([]);
   });
 
+  it('enforces a strict photo filename whitelist', () => {
+    const dates = ['2026-02-07', '2026-02-12', '2026-02-13', '2026-02-18'];
+    const allowedSrc = new Set([
+      '/actuals/jim-dubai-mall.png',
+      '/actuals/jim-mojito-dubai.png',
+      '/actuals/oman-camel-milk.png',
+    ]);
+
+    const photos = dates.flatMap((date) =>
+      getActualMomentsForDate(date).flatMap((moment) => moment.photos),
+    );
+
+    for (const photo of photos) {
+      expect(allowedSrc.has(photo.src)).toBe(true);
+    }
+  });
+
   it('returns cloned data so callers cannot mutate seed state', () => {
-    const first = getActualMomentsForDate('2026-02-12');
-    const second = getActualMomentsForDate('2026-02-12');
+    const first = getActualMomentsForDate('2026-02-07');
+    const second = getActualMomentsForDate('2026-02-07');
     first[0].photos[0].caption = 'edited';
     expect(second[0].photos[0].caption).not.toBe('edited');
   });
