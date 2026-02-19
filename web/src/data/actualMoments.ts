@@ -1,6 +1,6 @@
 import type { TripActualMoment } from '../types';
 
-const SOURCE = 'B-G-M Fam iMessage export (Susan Barley / Jim Greenfield)';
+const SOURCE = 'B-G-M Fam iMessage export (photos/messages shared by Susan Barley and Jim Greenfield)';
 
 const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
   '2026-02-03': [
@@ -17,19 +17,19 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       id: 'actual-2026-02-07-dubai-mall',
       source: SOURCE,
       whenLabel: 'Sat, Feb 7 - AM',
-      text: 'Extracted message snippet: Jim at the Dubai Mall. We are in search of a beer.',
+      text: 'Extracted message snippet: Jim at the Dubai Mall. We are in search of a beer. Photo set shared into the family thread by Susan/Jim.'
       photos: [
         {
           id: 'actual-photo-2026-02-07-mall',
           src: '/actuals/jim-dubai-mall.png',
           alt: 'Jim standing inside Dubai Mall',
-          caption: 'Jim at Dubai Mall.',
+          caption: 'Jim at Dubai Mall (shared in family thread).',
         },
         {
           id: 'actual-photo-2026-02-07-mojito',
           src: '/actuals/jim-mojito-dubai.png',
           alt: 'Jim with a lemon mint drink in Dubai Mall',
-          caption: 'Lemon mint mojito NA iced drink from Hawker Market in Dubai Mall.',
+          caption: 'Lemon mint mojito NA iced drink from Hawker Market in Dubai Mall (Susan/Jim share).',
         },
       ],
     },
@@ -111,13 +111,13 @@ const ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       id: 'actual-2026-02-18-ramadan-iftar',
       source: SOURCE,
       whenLabel: 'Wed, Feb 18 - PM (Oman)',
-      text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman.',
+      text: 'The dry run of the lavish iftar dinner buffet to break the fast after each day of Ramadan. Incredible food, beautiful lights and tents. We were so lucky to experience it. Fasting/Ramadan starts the early morning of the 19th in Oman. Shared by Susan and Jim in the family thread.'
       photos: [
         {
           id: 'actual-photo-2026-02-18-family-dinner',
           src: '/actuals/family-dinner-palms.png',
           alt: 'Family dinner under palm trees at night in Oman',
-          caption: 'Evening gathering during the Ramadan/iftar part of the Oman leg.',
+          caption: 'Evening gathering during the Ramadan/iftar part of the Oman leg (photo shared by Susan/Jim).',
         },
       ],
     },
