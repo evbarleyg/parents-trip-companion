@@ -407,6 +407,7 @@ export function App() {
     () => selectedActualMomentRows.filter((row) => row.moment.photos.length > 0),
     [selectedActualMomentRows],
   );
+  const selectedDateMs = useMemo(() => parseTripDateMs(selectedDate), [selectedDate]);
   const photoDates = useMemo(
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
@@ -423,6 +424,25 @@ export function App() {
     [tripPlan.days],
   );
   const fullTripPhotoRows = useMemo(() => tripPhotoMomentRows, [tripPhotoMomentRows]);
+  const nearbyTripPhotoRows = useMemo(() => {
+    const hasSelectedTimestamp = Number.isFinite(selectedDateMs);
+
+    return tripPhotoMomentRows
+      .filter((row) => row.date !== selectedDate)
+      .sort((a, b) => {
+        if (!hasSelectedTimestamp) return b.date.localeCompare(a.date);
+
+        const aDistance = Math.abs(parseTripDateMs(a.date) - selectedDateMs);
+        const bDistance = Math.abs(parseTripDateMs(b.date) - selectedDateMs);
+        if (aDistance === bDistance) return b.date.localeCompare(a.date);
+        return aDistance - bDistance;
+      });
+  }, [selectedDate, selectedDateMs, tripPhotoMomentRows]);
+  const mainPagePhotoRows = useMemo(
+    () => (selectedDayPhotoRows.length > 0 ? selectedDayPhotoRows : nearbyTripPhotoRows.slice(0, 20)),
+    [nearbyTripPhotoRows, selectedDayPhotoRows],
+  );
+  const mainPageUsesNearbyFallback = selectedDayPhotoRows.length === 0 && mainPagePhotoRows.length > 0;
   const galleryPhotoRows = useMemo(
     () => (photoScope === 'selected_day' ? selectedDayPhotoRows : fullTripPhotoRows),
     [fullTripPhotoRows, photoScope, selectedDayPhotoRows],
@@ -1655,7 +1675,8 @@ export function App() {
 
                 {renderActualMomentsCard(
                   `focus-moments ${panelHiddenClass('plan')}`,
-                  selectedDayPhotoRows,
+                  mainPagePhotoRows,
+                  mainPageUsesNearbyFallback,
                 )}
               </section>
             </>
