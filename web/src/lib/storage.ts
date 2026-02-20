@@ -73,8 +73,8 @@ export function saveAppViewTab(tab: AppViewTab): void {
 }
 
 export function loadMobilePanel(): MobilePanel {
-  if (typeof localStorage === 'undefined') return 'now';
-  return resolveMobilePanel(localStorage.getItem(MOBILE_PANEL_KEY), 'now');
+  if (typeof localStorage === 'undefined') return 'plan';
+  return resolveMobilePanel(localStorage.getItem(MOBILE_PANEL_KEY), 'plan');
 }
 
 export function saveMobilePanel(panel: MobilePanel): void {

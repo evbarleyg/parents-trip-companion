@@ -1,0 +1,26 @@
+# Dad content batch template
+# Keep one entry per block.
+
+---
+Entry ID: dad-001
+Date Hint:
+Place Hint:
+Captured At:
+Photo Files:
+Text:
+
+---
+Entry ID: dad-002
+Date Hint:
+Place Hint:
+Captured At:
+Photo Files:
+Text:
+
+---
+Entry ID: dad-003
+Date Hint:
+Place Hint:
+Captured At:
+Photo Files:
+Text:

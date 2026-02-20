@@ -8,6 +8,7 @@ Standalone family travel companion app for the itinerary window **February 3, 20
 - Document upload + review-before-merge flow (`PDF`, `DOCX`, `DOC`, `TXT`)
 - Today-first dashboard with map, location scoring, live recommendations, and chat
 - Day-level "Actual Moments" cards enriched from the `B-G-M Fam` iMessage export (text snippets + photos)
+- Dad content enrichment workflow for raw text + photo drops (review-gated publishing)
 
 ## Architecture
 
@@ -75,6 +76,13 @@ node -e "crypto.subtle.digest('SHA-256',new TextEncoder().encode(process.argv[1]
 - Web deploy target: GitHub Pages (set `VITE_BASE_PATH=/parents-trip-companion/` at build).
 - API deploy target: Cloudflare Workers (`wrangler deploy`).
 - Set production CORS origin to your Pages origin.
+
+## Dad Content Workflow
+
+- Intake guide: `docs/dad-content-intake.md`
+- Unresolved queue: `docs/dad-content-review.md`
+- EXIF allocation report (latest drop): `docs/dad-content-exif-allocation-2026-02-20.md`
+- Inbox template: `content/dad-inbox/template/`
 
 ## Favicon
 

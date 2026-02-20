@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Leaflet from 'leaflet';
 import {
-  askRecommendationChat,
   extractDocument,
   getRuntimeCapabilities,
-  getNearbyRecommendations,
   unlockPasscode,
 } from './lib/api';
-import { VERIFIED_ACTUAL_PHOTO_SRCS } from './data/actualPhotoManifest';
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
-import { formatDateLabel, slugify, toInputClock } from './lib/format';
+import { formatDateLabel, slugify } from './lib/format';
 import { getTodayInTripRange } from './lib/date';
 import { dayHasPhotos, dayOptionLabel, dayPhotoCount } from './lib/day';
 import { detectWhereAmI } from './lib/location';
@@ -30,14 +27,27 @@ import {
   saveTripPlanState,
 } from './lib/storage';
 import { getCurrentAndNext } from './lib/time';
+import {
+  getDefaultMapScopes,
+  MAP_SCOPE_BY_TAB,
+  type MapScopeByTab,
+  type MapScope,
+  resolveMapScopeForTab,
+} from './lib/view-state';
+import {
+  resolveActiveMapScope,
+  transitionMapScopeFromControl,
+  transitionToDate,
+  transitionToDayDetails,
+  transitionToTab,
+  transitionToToday,
+} from './lib/navigation';
 import type {
   AppViewTab,
   CapabilitiesResponse,
-  ChatContext,
+  TripActualMoment,
   MapStatus,
   MobilePanel,
-  RecommendationItem,
-  RecCategory,
   SourceDocument,
   TripDay,
   TripPatch,
@@ -51,38 +61,21 @@ import type {
 const GEO_REFRESH_MS = 5 * 60 * 1000;
 const MOBILE_BREAKPOINT = 980;
 
-const CATEGORY_LABEL: Record<RecCategory, string> = {
-  sights: 'Sights',
-  food: 'Food',
-  coffee: 'Coffee',
-  rest: 'Rest',
-};
-
 const APP_TAB_LABEL: Record<AppViewTab, string> = {
-  trip_overview: 'Trip Overview',
-  day_detail: 'Day Detail',
-  photo_gallery: 'Photo Gallery',
+  trip_overview: 'Full Trip',
+  day_detail: 'Day Details',
 };
 
 const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
-  now: 'Now',
   map: 'Map',
   plan: 'Plan',
-  recs: 'Recs',
 };
 
-type MapScope = 'day' | 'trip';
-type MapStyle = 'road' | 'satellite';
 type LeafletModule = typeof import('leaflet');
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
   day: 'Selected Day',
   trip: 'Full Trip',
-};
-
-const MAP_STYLE_LABEL: Record<MapStyle, string> = {
-  road: 'Road',
-  satellite: 'Satellite',
 };
 
 interface RegionSegment {
@@ -102,6 +95,57 @@ interface MapStop {
   lng: number;
 }
 
+interface ActualMomentRow {
+  date: string;
+  moment: TripActualMoment;
+}
+
+interface DayAnnotationRow {
+  id: string;
+  source: string;
+  whenLabel: string;
+  text: string;
+}
+
+const REMOVED_PHOTO_FILE_MARKERS = ['img_4017.jpeg', 'img_4024.jpeg', 'img_4041.jpeg'];
+
+function shouldRemovePhotoByMarker(photo: { src: string; alt: string; caption: string }): boolean {
+  const search = `${photo.src} ${photo.alt} ${photo.caption}`.toLowerCase();
+  return REMOVED_PHOTO_FILE_MARKERS.some((marker) => search.includes(marker));
+}
+
+function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripActualMoment[] {
+  if (!moments || moments.length === 0) return [];
+
+  return moments
+    .map((moment) => ({
+      ...moment,
+      photos: moment.photos.filter((photo) => !shouldRemovePhotoByMarker(photo)),
+    }))
+    .filter((moment) => {
+      if (moment.photos.length > 0) return true;
+      const searchable = `${moment.text} ${moment.whenLabel} ${moment.source}`.toLowerCase();
+      return !REMOVED_PHOTO_FILE_MARKERS.some((marker) => searchable.includes(marker));
+    });
+}
+
+function mergeActualMoments(
+  restoredMoments: TripActualMoment[] | undefined,
+  seedMoments: TripActualMoment[] | undefined,
+): TripActualMoment[] {
+  const mergedById = new Map<string, TripActualMoment>();
+
+  for (const moment of sanitizeActualMoments(seedMoments)) {
+    mergedById.set(moment.id, moment);
+  }
+
+  for (const moment of sanitizeActualMoments(restoredMoments)) {
+    mergedById.set(moment.id, moment);
+  }
+
+  return [...mergedById.values()];
+}
+
 function regionColor(region: string): string {
   const key = region.toLowerCase();
   if (key.includes('oman')) return '#276f8f';
@@ -111,15 +155,6 @@ function regionColor(region: string): string {
   if (key.includes('morocco')) return '#7b5d28';
   if (key.includes('travel') || key.includes('transit')) return '#516178';
   return '#365e8d';
-}
-
-function toPublicAssetUrl(path: string): string {
-  if (!path) return path;
-  if (/^https?:\/\//i.test(path)) return path;
-
-  const base = (import.meta.env.BASE_URL || '/').replace(/\/+$/, '');
-  const normalized = path.replace(/^\/+/, '');
-  return `${base}/${normalized}`;
 }
 
 function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode>): TripPlan {
@@ -143,16 +178,9 @@ function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
     timezone: plan.timezone || seed.timezone,
     days: plan.days.map((day) => {
       const seedDay = seedDaysByDate.get(day.date);
-
-      const dayHasCoords = [...day.summaryItems, ...day.detailItems].some(
-        (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
-      );
-
       return {
         ...day,
-        summaryItems: !dayHasCoords && seedDay ? seedDay.summaryItems : day.summaryItems,
-        detailItems: !dayHasCoords && seedDay ? seedDay.detailItems : day.detailItems,
-        actualMoments: seedDay?.actualMoments || day.actualMoments || [],
+        actualMoments: mergeActualMoments(day.actualMoments, seedDay?.actualMoments),
       };
     }),
   };
@@ -208,6 +236,7 @@ function buildRegionSegments(days: TripDay[]): RegionSegment[] {
 }
 
 const AUTO_UNLOCK_PASSCODE = 'SusanJim2026';
+const MAX_TRIP_PHOTO_FALLBACK = 20;
 
 export function App() {
   const [session, setSession] = useState<UnlockResponse>(() => ensureOpenSession(loadSession, saveSession));
@@ -227,31 +256,25 @@ export function App() {
     const restored = loadTripPlanState();
     const viewModes = loadDayViewModes();
     const basePlan = restored ? hydratePlanWithSeedData(restored, seedPlan) : seedPlan;
-    const hydrated = applyStoredViewModes(basePlan, viewModes);
-
-    if (!Array.isArray(hydrated.days) || hydrated.days.length === 0) {
-      return seedPlan;
-    }
-
-    return hydrated;
+    return applyStoredViewModes(basePlan, viewModes);
   }, []);
 
   const [tripPlan, setTripPlan] = useState<TripPlan>(initialPlan || seedTripPlan);
   const [selectedDate, setSelectedDate] = useState<string>(() => getTodayInTripRange(initialPlan));
   const [whereAmI, setWhereAmI] = useState<WhereAmIState>(() => defaultWhereAmI(selectedDate));
   const [autoLocateEnabled, setAutoLocateEnabled] = useState(false);
-  const [manualDayId, setManualDayId] = useState<string>('');
+  const [manualDayId, setManualDayId] = useState<string>(selectedDate);
   const [manualItemId, setManualItemId] = useState<string>('');
 
   const initialAppTab = useMemo(() => loadAppViewTab(), []);
   const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(initialAppTab);
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
-  const [mapScope, setMapScope] = useState<MapScope>(() => (initialAppTab === 'trip_overview' ? 'trip' : 'day'));
-  const [mapStyle, setMapStyle] = useState<MapStyle>('road');
-  const [overviewPanelsCollapsed, setOverviewPanelsCollapsed] = useState({
-    timeline: true,
-    regions: true,
+  const [mapScopeByTab, setMapScopeByTab] = useState<MapScopeByTab>(() => {
+    const defaults = getDefaultMapScopes();
+    defaults[initialAppTab] = resolveMapScopeForTab(initialAppTab, {});
+    return defaults;
   });
+  const activeMapScope = resolveActiveMapScope(activeAppTab, mapScopeByTab);
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -261,18 +284,6 @@ export function App() {
   const [mapError, setMapError] = useState<string | null>(null);
   const [mapMountVersion, setMapMountVersion] = useState(0);
   const [leafletModule, setLeafletModule] = useState<LeafletModule | null>(null);
-
-  const [recommendations, setRecommendations] = useState<RecommendationItem[]>([]);
-  const [recommendationError, setRecommendationError] = useState<string | null>(null);
-  const [recommendationLoading, setRecommendationLoading] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<RecCategory>('sights');
-  const [lastRecommendationCategory, setLastRecommendationCategory] = useState<RecCategory | null>(null);
-
-  const [chatQuestion, setChatQuestion] = useState('');
-  const [chatAnswer, setChatAnswer] = useState<string | null>(null);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [chatError, setChatError] = useState<string | null>(null);
-  const [lastChatQuestion, setLastChatQuestion] = useState<string | null>(null);
 
   const [extracting, setExtracting] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -287,32 +298,17 @@ export function App() {
 
   const mapRef = useRef<Leaflet.Map | null>(null);
   const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
-  const roadTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
-  const satelliteTileLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
   const lastViewportFitKeyRef = useRef<string | null>(null);
-  const previousAppTabRef = useRef<AppViewTab | null>(null);
-  const recommendationCacheRef = useRef<Record<string, RecommendationItem[]>>({});
-
-  const selectedDateExists = useMemo(
-    () => tripPlan.days.some((day) => day.date === selectedDate),
-    [tripPlan.days, selectedDate],
-  );
 
   const selectedDay = useMemo(
-    () =>
-      tripPlan.days.find((day) => day.date === selectedDate) ||
-      tripPlan.days[0] ||
-      seedTripPlan.days[0],
+    () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
     [tripPlan.days, selectedDate],
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
-  const selectedDayHasCoords = useMemo(
-    () => selectedItems.some((item) => typeof item.lat === 'number' && typeof item.lng === 'number'),
-    [selectedItems],
-  );
   const nowAndNext = useMemo(() => getCurrentAndNext(selectedItems), [selectedItems]);
   const regionSegments = useMemo(() => buildRegionSegments(tripPlan.days), [tripPlan.days]);
   const todayDate = useMemo(() => getTodayInTripRange(tripPlan), [tripPlan]);
@@ -321,57 +317,89 @@ export function App() {
     [tripPlan.days, todayDate, selectedDay.region],
   );
 
-  const whereAmIItem = useMemo(() => {
-    if (!whereAmI.activeItemId || !selectedDay) return null;
-    return getActiveItems(selectedDay).find((item) => item.id === whereAmI.activeItemId) || null;
-  }, [selectedDay, whereAmI.activeItemId]);
-
   const manualDay = useMemo(() => tripPlan.days.find((day) => day.date === manualDayId), [tripPlan.days, manualDayId]);
   const itemOptionsForManual = manualDay ? [...manualDay.summaryItems, ...manualDay.detailItems] : [];
   const extractEnabled = runtimeCapabilities.features.extract;
-  const recommendationsEnabled = runtimeCapabilities.features.recommendations;
-  const chatEnabled = runtimeCapabilities.features.chat;
   const dayModeLabel = selectedDay.activeView === 'detail' ? 'Detailed Plan' : 'Trip Summary';
   const selectedActualMoments = selectedDay.actualMoments || [];
+  const selectedDayAnnotations = useMemo<DayAnnotationRow[]>(
+    () =>
+      selectedActualMoments
+        .filter((moment) => moment.source.toLowerCase().includes('dad updates') && moment.text.trim().length > 0)
+        .map((moment) => ({
+          id: moment.id,
+          source: moment.source,
+          whenLabel: moment.whenLabel,
+          text: moment.text,
+        })),
+    [selectedActualMoments],
+  );
   const selectedDayHasPhotos = dayHasPhotos(selectedDay);
   const selectedDayPhotoCount = dayPhotoCount(selectedDay);
+  const selectedActualMomentRows = useMemo(
+    () => selectedActualMoments.map((moment) => ({ date: selectedDate, moment })),
+    [selectedDate, selectedActualMoments],
+  );
+  const selectedActualMomentIds = useMemo(
+    () => new Set(selectedActualMoments.map((moment) => moment.id)),
+    [selectedActualMoments],
+  );
+  const selectedDateMs = useMemo(() => Date.parse(`${selectedDate}T00:00:00Z`), [selectedDate]);
   const photoDates = useMemo(
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
   );
+  const tripPhotoMomentRows = useMemo(
+    () =>
+      tripPlan.days
+        .flatMap((day) =>
+          (day.actualMoments || [])
+            .filter((moment) => moment.photos.length > 0)
+            .map((moment) => ({ date: day.date, moment })),
+        )
+      .sort((a, b) => b.date.localeCompare(a.date)),
+    [tripPlan.days],
+  );
+  const nearbyTripPhotoRows = useMemo(() => {
+    const hasSelectedTimestamp = Number.isFinite(selectedDateMs);
+    return tripPhotoMomentRows
+      .filter((row) => !selectedActualMomentIds.has(row.moment.id))
+      .sort((a, b) => {
+        if (!hasSelectedTimestamp) {
+          return b.date.localeCompare(a.date);
+        }
 
-  const photoGalleryRows = useMemo(() => {
-    const mapped = tripPlan.days.flatMap((day) =>
-      (day.actualMoments || []).flatMap((moment) =>
-        moment.photos.map((photo) => ({
-          src: photo.src,
-          caption: photo.caption,
-          alt: photo.alt,
-          date: day.date,
-          region: day.region,
-          moment: moment.whenLabel,
-        })),
-      ),
-    );
+        const aDistance = Math.abs(Date.parse(`${a.date}T00:00:00Z`) - selectedDateMs);
+        const bDistance = Math.abs(Date.parse(`${b.date}T00:00:00Z`) - selectedDateMs);
+        if (aDistance === bDistance) {
+          return b.date.localeCompare(a.date);
+        }
+        return aDistance - bDistance;
+      });
+  }, [selectedActualMomentIds, selectedDateMs, tripPhotoMomentRows]);
+  const fullTripPhotoRows = useMemo(() => tripPhotoMomentRows, [tripPhotoMomentRows]);
+  const visibleActualMoments = useMemo(() => {
+    if (selectedActualMoments.some((moment) => moment.photos.length > 0)) {
+      return selectedActualMomentRows.concat(nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK));
+    }
 
-    const mappedBySrc = new Map(mapped.map((row) => [row.src, row]));
+    if (nearbyTripPhotoRows.length > 0) {
+      const withSelectedText = selectedActualMomentRows.slice(0, 4);
+      return withSelectedText.length > 0
+        ? withSelectedText.concat(nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK))
+        : nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK);
+    }
 
-    return VERIFIED_ACTUAL_PHOTO_SRCS.map((src) => {
-      const match = mappedBySrc.get(src);
-      return {
-        src,
-        date: match?.date || 'UNMAPPED',
-        region: match?.region || 'Unmapped',
-        moment: match?.moment || 'Unmapped',
-        caption: match?.caption || 'No caption mapped',
-        alt: match?.alt || 'No alt mapped',
-        mapped: Boolean(match),
-      };
-    });
-  }, [tripPlan.days]);
+    return selectedActualMomentRows;
+  }, [
+    nearbyTripPhotoRows,
+    selectedActualMoments,
+    selectedActualMomentRows,
+  ]);
+  const visibleActualMomentsUsesRecent = !selectedActualMoments.some((moment) => moment.photos.length > 0);
 
   const mapStops = useMemo<MapStop[]>(() => {
-    if (mapScope === 'day') {
+    if (activeMapScope === 'day') {
       return selectedItems
         .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
         .map((item) => ({
@@ -400,15 +428,7 @@ export function App() {
         } satisfies MapStop;
       })
       .filter((stop): stop is MapStop => Boolean(stop));
-  }, [mapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
-
-  useEffect(() => {
-    if (mapScope !== 'day') return;
-    if (selectedDayHasCoords) return;
-    setMapScope('trip');
-    setStatusMessage(`No map coordinates on ${formatDateLabel(selectedDate)}. Switched map to Full Trip.`);
-  }, [mapScope, selectedDayHasCoords, selectedDate]);
-
+  }, [activeMapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
     setUiAlert({ level, message, scope });
@@ -426,44 +446,87 @@ export function App() {
     });
   }, []);
 
-  function setAppTab(tab: AppViewTab) {
-    setActiveAppTabState(tab);
-    saveAppViewTab(tab);
-    setMapScope(tab === 'trip_overview' ? 'trip' : 'day');
+  function applyNavigation(next: ReturnType<typeof transitionToDate>) {
+    if (next.selectedDate !== selectedDate) setSelectedDate(next.selectedDate);
+    if (next.activeAppTab !== activeAppTab) {
+      setActiveAppTabState(next.activeAppTab);
+      saveAppViewTab(next.activeAppTab);
+    }
+
+    if (next.mapScopeByTab !== mapScopeByTab) {
+      setMapScopeByTab(next.mapScopeByTab);
+    }
   }
 
-  useEffect(() => {
-    const prev = previousAppTabRef.current;
-    previousAppTabRef.current = activeAppTab;
-
-    if (!prev || prev === activeAppTab) return;
-
-    const movedAcrossGalleryBoundary =
-      (prev === 'photo_gallery' && activeAppTab !== 'photo_gallery') ||
-      (prev !== 'photo_gallery' && activeAppTab === 'photo_gallery');
-
-    if (!movedAcrossGalleryBoundary) return;
-
-    setMapError(null);
-    setMapStatus('initializing');
-    hasAppliedInitialRegionLockRef.current = false;
-    lastViewportFitKeyRef.current = null;
-    setMapMountVersion((v) => v + 1);
-  }, [activeAppTab]);
+  function setAppTab(tab: AppViewTab) {
+    const next = transitionToTab(
+      {
+        activeAppTab,
+        selectedDate,
+        mapScopeByTab,
+      },
+      tab,
+    );
+    applyNavigation(next);
+  }
 
   function setMobilePanel(panel: MobilePanel) {
     setActiveMobilePanelState(panel);
     saveMobilePanel(panel);
   }
 
-  function selectDateForDayMap(date: string) {
-    setSelectedDate(date);
-    setMapScope('day');
+  function setDateOnly(date: string) {
+    const next = transitionToDate(
+      {
+        activeAppTab,
+        selectedDate,
+        mapScopeByTab,
+      },
+      date,
+    );
+    applyNavigation(next);
+  }
+
+  function setDateAndOpenDayDetail(date: string, mobilePanelOnMobile: MobilePanel = 'plan') {
+    const next = transitionToDayDetails(
+      {
+        activeAppTab,
+        selectedDate,
+        mapScopeByTab,
+      },
+      date,
+    );
+    applyNavigation(next);
+    const nextScope = resolveActiveMapScope(next.activeAppTab, next.mapScopeByTab);
+    if (isMobile) {
+      setMobilePanel(mobilePanelOnMobile);
+    }
+    return nextScope;
   }
 
   function goToToday() {
-    selectDateForDayMap(todayDate);
+    const next = transitionToToday(
+      {
+        activeAppTab,
+        selectedDate,
+        mapScopeByTab,
+      },
+      todayDate,
+    );
+    applyNavigation(next);
     postAlert('info', `Jumped to ${formatDateLabel(todayDate)}.`);
+  }
+
+  function setMapScopeForActiveTab(scope: MapScope) {
+    const next = transitionMapScopeFromControl(
+      {
+        activeAppTab,
+        selectedDate,
+        mapScopeByTab,
+      },
+      scope,
+    );
+    applyNavigation(next);
   }
 
   function retryMapInit() {
@@ -473,12 +536,11 @@ export function App() {
   }
 
   function focusMapStop(stop: MapStop) {
-    selectDateForDayMap(stop.date);
-    if (isMobile) setMobilePanel('map');
+    const scope = setDateAndOpenDayDetail(stop.date, 'map');
 
     if (!mapRef.current) return;
 
-    mapRef.current.setView([stop.lat, stop.lng], mapScope === 'trip' ? 8 : 11, {
+    mapRef.current.setView([stop.lat, stop.lng], scope === 'trip' ? 8 : 11, {
       animate: true,
     });
     setStatusMessage(`Focused map on ${stop.label}.`);
@@ -492,14 +554,6 @@ export function App() {
   useEffect(() => {
     saveTripPlanState(tripPlan);
   }, [tripPlan]);
-
-  useEffect(() => {
-    if (selectedDateExists) return;
-    const fallbackDate = tripPlan.days[0]?.date;
-    if (fallbackDate) {
-      setSelectedDate(fallbackDate);
-    }
-  }, [selectedDateExists, tripPlan.days]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -589,6 +643,21 @@ export function App() {
       return;
     }
 
+    if (mapRef.current && mapContainerRef.current === container) {
+      return;
+    }
+
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+      markerLayerRef.current = null;
+    }
+
+    resizeObserverRef.current?.disconnect();
+    resizeObserverRef.current = null;
+
+    mapContainerRef.current = container;
+
     const L = leafletModule;
     let cancelled = false;
     let rafId = 0;
@@ -608,24 +677,9 @@ export function App() {
           preferCanvas: true,
         }).setView([26, 20], 3);
 
-        const roadLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors',
-        });
-        const satelliteLayer = L.tileLayer(
-          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-          {
-            attribution: 'Tiles &copy; Esri',
-          },
-        );
-
-        roadTileLayerRef.current = roadLayer;
-        satelliteTileLayerRef.current = satelliteLayer;
-
-        if (mapStyle === 'satellite') {
-          satelliteLayer.addTo(map);
-        } else {
-          roadLayer.addTo(map);
-        }
+        }).addTo(map);
 
         const markerLayer = L.layerGroup().addTo(map);
         mapRef.current = map;
@@ -658,28 +712,11 @@ export function App() {
 
       mapRef.current = null;
       markerLayerRef.current = null;
-      roadTileLayerRef.current = null;
-      satelliteTileLayerRef.current = null;
+      if (mapContainerRef.current === container) {
+        mapContainerRef.current = null;
+      }
     };
   }, [leafletModule, mapMountVersion, invalidateMap]);
-
-  useEffect(() => {
-    if (mapStatus !== 'ready' || !mapRef.current) return;
-
-    const map = mapRef.current;
-    const road = roadTileLayerRef.current;
-    const satellite = satelliteTileLayerRef.current;
-
-    if (!road || !satellite) return;
-
-    if (mapStyle === 'satellite') {
-      if (map.hasLayer(road)) map.removeLayer(road);
-      if (!map.hasLayer(satellite)) map.addLayer(satellite);
-    } else {
-      if (map.hasLayer(satellite)) map.removeLayer(satellite);
-      if (!map.hasLayer(road)) map.addLayer(road);
-    }
-  }, [mapStatus, mapStyle]);
 
   useEffect(() => {
     if (mapStatus !== 'ready') return;
@@ -720,11 +757,9 @@ export function App() {
 
   useEffect(() => {
     if (!leafletModule || mapStatus !== 'ready' || !mapRef.current || !markerLayerRef.current) return;
+    const L = leafletModule;
 
-    try {
-      const L = leafletModule;
-
-      markerLayerRef.current.clearLayers();
+    markerLayerRef.current.clearLayers();
 
     const bounds = L.latLngBounds([]);
     const todayRegionBounds = L.latLngBounds([]);
@@ -765,11 +800,7 @@ export function App() {
         );
 
         marker.on('click', () => {
-          selectDateForDayMap(day.date);
-          setAppTab('day_detail');
-          if (isMobile) {
-            setMobilePanel('plan');
-          }
+          setDateAndOpenDayDetail(day.date);
         });
 
         markerLayerRef.current?.addLayer(marker);
@@ -784,7 +815,7 @@ export function App() {
       });
 
       if (coords.length >= 2) {
-        if (mapScope === 'trip') {
+        if (activeMapScope === 'trip') {
           markerLayerRef.current.addLayer(
             L.polyline(coords, {
               color,
@@ -836,11 +867,11 @@ export function App() {
         hasAppliedInitialRegionLockRef.current = true;
         lastViewportFitKeyRef.current = 'initial';
       } else {
-        const fitKey = mapScope === 'day' ? `day:${selectedDate}` : 'trip';
+        const fitKey = activeMapScope === 'day' ? `day:${selectedDate}` : 'trip';
         if (lastViewportFitKeyRef.current !== fitKey) {
           mapRef.current.stop();
 
-          if (mapScope === 'day' && selectedDayBounds.isValid()) {
+          if (activeMapScope === 'day' && selectedDayBounds.isValid()) {
             if (selectedDayCoords.length === 1) {
               const [lat, lng] = selectedDayCoords[0];
               const currentZoom = mapRef.current.getZoom();
@@ -868,19 +899,13 @@ export function App() {
       }
     }
 
-      invalidateMap();
-    } catch (error) {
-      setMapStatus('error');
-      setMapError((error as Error).message || 'Map interaction failed.');
-      postAlert('error', 'Map failed safely. Use Retry Map to continue.');
-      trackEvent('map_error');
-    }
+    invalidateMap();
   }, [
     tripPlan,
     selectedDate,
     selectedDay.region,
     whereAmI.currentLatLng,
-    mapScope,
+    activeMapScope,
     isMobile,
     mapStatus,
     invalidateMap,
@@ -944,6 +969,23 @@ export function App() {
     };
   }, [autoLocateEnabled, selectedDate, tripPlan]);
 
+  useEffect(() => {
+    if (tripPlan.days.length === 0) return;
+    if (manualDayId && tripPlan.days.some((day) => day.date === manualDayId)) return;
+    setManualDayId(selectedDate);
+  }, [manualDayId, selectedDate, tripPlan.days]);
+
+  useEffect(() => {
+    if (!manualDay || itemOptionsForManual.length === 0) {
+      if (manualItemId) setManualItemId('');
+      return;
+    }
+
+    if (!manualItemId || !itemOptionsForManual.some((item) => item.id === manualItemId)) {
+      setManualItemId(itemOptionsForManual[0].id);
+    }
+  }, [itemOptionsForManual, manualDay, manualItemId]);
+
   function setDayViewMode(date: string, mode: ViewMode) {
     setTripPlan((prev) => {
       const updated = {
@@ -965,7 +1007,7 @@ export function App() {
     const items = getActiveItems(day);
     const selectedItem = items.find((entry) => entry.id === manualItemId) || items[0] || null;
 
-    selectDateForDayMap(day.date);
+    setDateOnly(day.date);
     setWhereAmI({
       mode: 'manual',
       currentLatLng:
@@ -982,7 +1024,7 @@ export function App() {
   }
 
   function clearManualOverride() {
-    setManualDayId('');
+    setManualDayId(selectedDate);
     setManualItemId('');
     setWhereAmI((prev) => ({ ...prev, mode: prev.currentLatLng ? 'auto' : 'unknown' }));
     postAlert('info', 'Switched back to automatic location detection.');
@@ -1065,169 +1107,42 @@ export function App() {
     trackEvent('merge_discard');
   }
 
-  function getRecommendationAnchor(): [number, number] | null {
-    if (whereAmI.currentLatLng) return whereAmI.currentLatLng;
-
-    const current = whereAmIItem;
-    if (current && typeof current.lat === 'number' && typeof current.lng === 'number') {
-      return [current.lat, current.lng];
-    }
-
-    const fallback = selectedItems.find((item) => typeof item.lat === 'number' && typeof item.lng === 'number');
-    if (!fallback) return null;
-    return [fallback.lat as number, fallback.lng as number];
-  }
-
-  function recommendationCacheKey(category: RecCategory, anchor: [number, number]): string {
-    const roundedLat = anchor[0].toFixed(4);
-    const roundedLng = anchor[1].toFixed(4);
-    return `${selectedDay.date}:${category}:${roundedLat},${roundedLng}`;
-  }
-
-  async function fetchRecommendations(category: RecCategory) {
-    if (!recommendationsEnabled) return;
-
-    const anchor = getRecommendationAnchor();
-    if (!anchor) {
-      const message = 'No location available. Use Locate or select a stop with coordinates.';
-      setRecommendationError(message);
-      postAlert('warn', message);
-      return;
-    }
-
-    const cacheKey = recommendationCacheKey(category, anchor);
-    const cached = recommendationCacheRef.current[cacheKey];
-    if (cached) {
-      setRecommendations(cached);
-      setActiveCategory(category);
-      setRecommendationError(null);
-      setLastRecommendationCategory(category);
-      setStatusMessage(`Loaded ${cached.length} cached ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
-      return;
-    }
-
-    setRecommendationLoading(true);
-    setRecommendationError(null);
-    setActiveCategory(category);
-    setLastRecommendationCategory(category);
-
-    try {
-      const items = await getNearbyRecommendations(
-        {
-          lat: anchor[0],
-          lng: anchor[1],
-          date: selectedDay.date,
-          timeLocal: toInputClock(),
-          category,
-          radiusMeters: 2500,
-        },
-        session.token,
-      );
-
-      setRecommendations(items);
-      recommendationCacheRef.current[cacheKey] = items;
-      setStatusMessage(`Loaded ${items.length} ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
-      postAlert('success', `Loaded ${items.length} ${CATEGORY_LABEL[category].toLowerCase()} recommendations.`);
-      trackEvent('recommendations_success');
-    } catch (error) {
-      const message = (error as Error).message || 'Recommendation lookup failed';
-      setRecommendationError(message);
-      postAlert('error', message);
-      trackEvent('recommendations_failure');
-    } finally {
-      setRecommendationLoading(false);
-    }
-  }
-
-  async function requestChat(question: string, clearInput = false) {
-    if (!chatEnabled || !question.trim()) return;
-
-    const active = whereAmIItem;
-    const context: ChatContext = {
-      date: selectedDay.date,
-      region: selectedDay.region,
-      activeItemTitle: active?.title || null,
-      activeItemLocation: active?.location || null,
-      lat: whereAmI.currentLatLng?.[0] ?? null,
-      lng: whereAmI.currentLatLng?.[1] ?? null,
-    };
-
-    setChatLoading(true);
-    setChatError(null);
-    setLastChatQuestion(question);
-
-    try {
-      const response = await askRecommendationChat(
-        {
-          question,
-          context,
-          nearby: recommendations,
-        },
-        session.token,
-      );
-
-      setChatAnswer(response.answer);
-      if (response.highlights.length > 0) {
-        setRecommendations(response.highlights);
-      }
-      if (clearInput) {
-        setChatQuestion('');
-      }
-      postAlert('success', 'Chat suggestions updated.');
-      trackEvent('chat_success');
-    } catch (error) {
-      const message = (error as Error).message || 'Chat request failed';
-      setChatError(message);
-      postAlert('error', message);
-      trackEvent('chat_failure');
-    } finally {
-      setChatLoading(false);
-    }
-  }
-
-  async function submitChat(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    await requestChat(chatQuestion.trim(), true);
-  }
-
-  function retryRecommendationRequest() {
-    if (!lastRecommendationCategory) return;
-    void fetchRecommendations(lastRecommendationCategory);
-  }
-
-  function retryChatRequest() {
-    if (!lastChatQuestion) return;
-    void requestChat(lastChatQuestion, false);
-  }
-
-  function renderActualMomentsCard(className = '') {
+  function renderActualMomentsCard(
+    className = '',
+    rows: ActualMomentRow[] = [],
+    showRecentFallback = false,
+  ) {
     return (
       <article className={`card ${className}`.trim()}>
-        <h2>Actual Moments</h2>
-        <p className="hint">Pulled from the B-G-M Fam iMessage export and anchored to this day.</p>
-        {selectedActualMoments.length === 0 ? (
-          <p className="hint">No extracted moments saved for this day yet.</p>
+        <h2>Family Photos</h2>
+        <p className="hint">Pulled from the B-G-M Fam iMessage export and matched to trip moments.</p>
+        {showRecentFallback && rows.length > 0 ? (
+          <p className="hint">No photos for this day. Showing recent photos from nearby trip days.</p>
+        ) : null}
+        {rows.length === 0 ? (
+          <p className="hint">No extracted moments saved yet.</p>
         ) : (
           <ul className="actual-moment-list">
-            {selectedActualMoments.map((moment) => (
-              <li key={moment.id} className="actual-moment">
-                <div className="pill-row compact">
-                  <span className="pill">{moment.whenLabel}</span>
-                  <span className="pill">{moment.source}</span>
-                </div>
-                <p>{moment.text}</p>
-                {moment.photos.length > 0 ? (
+          {rows.map((row) => (
+            <li key={`${row.date}-${row.moment.id}`} className="actual-moment">
+              <div className="pill-row compact">
+                <span className="pill">{row.moment.whenLabel}</span>
+                <span className="pill">{row.moment.source}</span>
+                {row.date !== selectedDate ? <span className="pill">{formatDateLabel(row.date)}</span> : null}
+              </div>
+                <p>{row.moment.text}</p>
+                {row.moment.photos.length > 0 ? (
                   <div className="actual-photo-grid">
-                    {moment.photos.map((photo) => (
-                      <figure key={photo.id} className="actual-photo-card">
-                        <img src={toPublicAssetUrl(photo.src)} alt={photo.alt} loading="lazy" />
-                        <figcaption>{photo.caption}</figcaption>
+                    {row.moment.photos.map((photo) => (
+                    <figure key={photo.id} className="actual-photo-card">
+                      <img src={photo.src} alt={photo.alt} loading="lazy" />
+                      <figcaption>{photo.caption}</figcaption>
                       </figure>
                     ))}
-                  </div>
+                    </div>
                 ) : null}
-              </li>
-            ))}
+            </li>
+          ))}
           </ul>
         )}
       </article>
@@ -1237,35 +1152,22 @@ export function App() {
   function renderMapCard(className = '') {
     return (
       <section className={`map-shell card ${className}`.trim()}>
-        <h2>Trip Map</h2>
+        <h2>Map</h2>
         <div className="map-scope-toggle" role="group" aria-label="Map scope">
           {(['day', 'trip'] as MapScope[]).map((scope) => (
             <button
               key={scope}
               type="button"
-              className={mapScope === scope ? 'active' : ''}
-              onClick={() => setMapScope(scope)}
-              aria-pressed={mapScope === scope}
+              className={activeMapScope === scope ? 'active' : ''}
+              onClick={() => setMapScopeForActiveTab(scope)}
+              aria-pressed={activeMapScope === scope}
             >
               {MAP_SCOPE_LABEL[scope]}
             </button>
           ))}
         </div>
-        <div className="map-scope-toggle" role="group" aria-label="Map style">
-          {(['road', 'satellite'] as MapStyle[]).map((style) => (
-            <button
-              key={style}
-              type="button"
-              className={mapStyle === style ? 'active' : ''}
-              onClick={() => setMapStyle(style)}
-              aria-pressed={mapStyle === style}
-            >
-              {MAP_STYLE_LABEL[style]}
-            </button>
-          ))}
-        </div>
         <p className="map-meta">
-          {mapScope === 'trip'
+          {activeMapScope === 'trip'
             ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
@@ -1294,7 +1196,7 @@ export function App() {
           <h3>Keyboard Stop List</h3>
           <p className="hint">
             Use these buttons to move map focus without dragging.{' '}
-            {mapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
+            {activeMapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
           </p>
           <ul className="map-stop-list">
             {mapStops.length === 0 ? (
@@ -1302,7 +1204,7 @@ export function App() {
                 <span className="hint">No map stops with coordinates are available for this scope.</span>
               </li>
             ) : (
-              mapStops.slice(0, mapScope === 'trip' ? 20 : 12).map((stop) => (
+              mapStops.slice(0, activeMapScope === 'trip' ? 20 : 12).map((stop) => (
                 <li key={stop.id}>
                   <div>
                     <strong>{stop.label}</strong>
@@ -1324,31 +1226,6 @@ export function App() {
     );
   }
 
-  function renderPhotoGalleryCard(className = '') {
-    return (
-      <section className={`card ${className}`.trim()}>
-        <h2>Photo Debug Gallery</h2>
-        <p className="hint">All whitelisted photos, including unmapped ones, with current date/region/caption bindings.</p>
-        <p className="hint">
-          Total: {photoGalleryRows.length} | Mapped: {photoGalleryRows.filter((row) => row.mapped).length} | Unmapped:{' '}
-          {photoGalleryRows.filter((row) => !row.mapped).length}
-        </p>
-        <ul className="actual-photo-grid">
-          {photoGalleryRows.map((row) => (
-            <li key={row.src} className="actual-photo-card gallery-card">
-              <img src={toPublicAssetUrl(row.src)} alt={row.alt} loading="lazy" />
-              <figcaption>
-                <div><strong>{row.date}</strong> · {row.region}</div>
-                <div>{row.moment}</div>
-                <div>{row.caption}</div>
-              </figcaption>
-            </li>
-          ))}
-        </ul>
-      </section>
-    );
-  }
-
   return (
     <main className="layout">
       <a className="skip-link" href="#primary-content">
@@ -1362,7 +1239,10 @@ export function App() {
           </p>
         </div>
         <div className="topbar-actions">
-          <button onClick={() => setAutoLocateEnabled((prev) => !prev)}>
+          <button
+            type="button"
+            onClick={() => setAutoLocateEnabled((prev) => !prev)}
+          >
             {autoLocateEnabled ? 'Pause Auto Locate' : 'Locate + Auto Refresh'}
           </button>
         </div>
@@ -1373,7 +1253,7 @@ export function App() {
 
       <section className="title-toolbar" aria-label="Trip controls">
         <nav className="toolbar-tabs" aria-label="Primary view tabs">
-          {(['trip_overview', 'day_detail', 'photo_gallery'] as AppViewTab[]).map((tab) => (
+          {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1395,7 +1275,7 @@ export function App() {
                   <select
                     id="toolbar-day-select"
                     value={selectedDate}
-                    onChange={(event) => selectDateForDayMap(event.target.value)}
+                    onChange={(event) => setDateOnly(event.target.value)}
                   >
                     {tripPlan.days.map((day) => (
                       <option key={day.date} value={day.date}>
@@ -1415,7 +1295,7 @@ export function App() {
                     value={selectedDay.region}
                     onChange={(event) => {
                       const next = tripPlan.days.find((day) => day.region === event.target.value);
-                      if (next) selectDateForDayMap(next.date);
+                      if (next) setDateOnly(next.date);
                     }}
                   >
                     {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
@@ -1449,9 +1329,9 @@ export function App() {
           <button
             type="button"
             className="secondary-btn"
-            onClick={() => setMapScope((prev) => (prev === 'day' ? 'trip' : 'day'))}
+            onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
           >
-            Map: {MAP_SCOPE_LABEL[mapScope]}
+            Map: {MAP_SCOPE_LABEL[activeMapScope]}
           </button>
 
           <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
@@ -1461,10 +1341,7 @@ export function App() {
           <details className={`toolbar-popover runtime ${runtimeCapabilities.mode}`}>
             <summary>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</summary>
             <div className="toolbar-popover-body">
-              <p>
-                Features: Extract {extractEnabled ? 'on' : 'off'} | Recs {recommendationsEnabled ? 'on' : 'off'} | Chat{' '}
-                {chatEnabled ? 'on' : 'off'}
-              </p>
+              <p>Feature: Upload extract {extractEnabled ? 'on' : 'off'}. Suggestions and chat are hidden.</p>
             </div>
           </details>
 
@@ -1491,400 +1368,189 @@ export function App() {
       </section>
 
       <section id="primary-content">
-        {activeAppTab === 'trip_overview' ? (
-          <>
-          {renderMapCard(panelHiddenClass('map'))}
-          <section className="trip-overview-grid">
-          <article className="card">
-            <div className="card-header-row">
-              <h2>Trip Timeline</h2>
+        {activeAppTab === 'day_detail' && isMobile ? (
+          <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
+            {(['map', 'plan'] as MobilePanel[]).map((panel) => (
               <button
+                key={panel}
                 type="button"
-                className="secondary-btn"
-                onClick={() =>
-                  setOverviewPanelsCollapsed((prev) => ({
-                    ...prev,
-                    timeline: !prev.timeline,
-                  }))
-                }
+                className={`mobile-panel-btn ${activeMobilePanel === panel ? 'active' : ''}`}
+                onClick={() => setMobilePanel(panel)}
               >
-                {overviewPanelsCollapsed.timeline ? 'Expand' : 'Collapse'}
+                {MOBILE_PANEL_LABEL[panel]}
               </button>
-            </div>
-            {!overviewPanelsCollapsed.timeline ? (
-              <>
-            <p>Jump by date or region. The map shows the full trip path.</p>
-            <div className="row">
-              <label htmlFor="overview-day-select">Date jump</label>
-              <select
-                id="overview-day-select"
-                value={selectedDate}
-                onChange={(event) => setSelectedDate(event.target.value)}
-              >
-                {tripPlan.days.map((day) => (
-                  <option key={day.date} value={day.date}>
-                    {dayOptionLabel(day, todayDate)}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="row">
-              <label htmlFor="overview-region-select">Region jump</label>
-              <select
-                id="overview-region-select"
-                value={selectedDay.region}
-                onChange={(event) => {
-                  const next = tripPlan.days.find((day) => day.region === event.target.value);
-                  if (next) setSelectedDate(next.date);
-                }}
-              >
-                {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
-                  <option key={region} value={region}>
-                    {region}
-                  </option>
-                ))}
-              </select>
-            </div>
+            ))}
+          </nav>
+        ) : null}
 
-            <ul className="day-overview-list">
-              {tripPlan.days.map((day) => (
-                <li
-                  key={`overview-day-${day.date}`}
-                  className={`day-row ${day.date === todayDate ? 'is-today' : ''} ${day.date === selectedDate ? 'is-selected' : ''}`}
-                >
-                  <button type="button" className="day-row-button" onClick={() => setSelectedDate(day.date)}>
-                    <span>{formatDateLabel(day.date)}</span>
-                    <small>{day.region}</small>
-                  </button>
-                  <div className="day-row-tags">
-                    {dayHasPhotos(day) ? <span className="photo-tag">Pics</span> : null}
-                    {day.date === todayDate ? <span className="today-tag">Today</span> : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
-              </>
-            ) : null}
-          </article>
+        <section className="primary-layout">
+          {renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)}
 
-          <article className="card">
-            <div className="card-header-row">
-              <h2>Region Legs</h2>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={() =>
-                  setOverviewPanelsCollapsed((prev) => ({
-                    ...prev,
-                    regions: !prev.regions,
-                  }))
-                }
-              >
-                {overviewPanelsCollapsed.regions ? 'Expand' : 'Collapse'}
-              </button>
-            </div>
-            {!overviewPanelsCollapsed.regions ? (
-              <>
-            <ul className="region-overview-list">
-              {regionSegments.map((segment) => (
-                <li
-                  key={segment.id}
-                  className={`region-row ${todayDate >= segment.startDate && todayDate <= segment.endDate ? 'is-today' : ''}`}
-                >
-                  <div>
-                    <strong>{segment.region}</strong>
-                    <p>
-                      {formatDateLabel(segment.startDate)} to {formatDateLabel(segment.endDate)} ({segment.days}{' '}
-                      {segment.days === 1 ? 'day' : 'days'})
-                    </p>
-                    {todayDate >= segment.startDate && todayDate <= segment.endDate ? <span className="today-tag">Current Region</span> : null}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectDateForDayMap(segment.startDate);
-                      setAppTab('day_detail');
-                      if (isMobile) setMobilePanel('plan');
-                    }}
-                  >
-                    Open
-                  </button>
-                </li>
-              ))}
-            </ul>
-              </>
-            ) : null}
-          </article>
-          </section>
-          </>
-        ) : activeAppTab === 'photo_gallery' ? (
-          <>
-            {renderPhotoGalleryCard()}
-          </>
-        ) : (
-          <>
-          {isMobile ? (
-            <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
-              {(['now', 'map', 'plan', 'recs'] as MobilePanel[]).map((panel) => (
-                <button
-                  key={panel}
-                  type="button"
-                  className={`mobile-panel-btn ${activeMobilePanel === panel ? 'active' : ''}`}
-                  onClick={() => setMobilePanel(panel)}
-                >
-                  {MOBILE_PANEL_LABEL[panel]}
-                </button>
-              ))}
-            </nav>
-          ) : null}
-
-          <section className="day-focus-grid">
-            {renderMapCard(`focus-map ${panelHiddenClass('map')}`)}
-            {renderActualMomentsCard(`focus-moments ${panelHiddenClass('plan')}`)}
-          </section>
-
-          <section className="dashboard-grid secondary-grid">
-            <article className={`card ${panelHiddenClass('now')}`}>
-              <h2>Today</h2>
-              <p className="hint">Use the title bar controls to change date, region, and plan mode.</p>
-
-              <div className="pill-row">
-                <span className={`pill ${whereAmI.confidence}`}>Where am I: {whereAmI.confidence}</span>
-                <span className="pill">Mode: {whereAmI.mode}</span>
-              </div>
-
-              <h3>Now</h3>
-              <p>{nowAndNext.current ? `${nowAndNext.current.title} (${nowAndNext.current.location})` : 'No active block'}</p>
-              <h3>Next Up</h3>
-              <p>{nowAndNext.next ? `${nowAndNext.next.title} (${nowAndNext.next.startTime})` : 'No upcoming block'}</p>
-            </article>
-
-            <article className={`card ${panelHiddenClass('plan')}`}>
-              <h2>Day Timeline</h2>
-              <div className="toggle-row">
-                <button
-                  className={selectedDay.activeView === 'detail' ? 'active' : ''}
-                  disabled={selectedDay.detailItems.length === 0}
-                  onClick={() => setDayViewMode(selectedDay.date, 'detail')}
-                >
-                  Detailed Plan
-                </button>
-                <button
-                  className={selectedDay.activeView === 'summary' ? 'active' : ''}
-                  onClick={() => setDayViewMode(selectedDay.date, 'summary')}
-                >
-                  Trip Summary
-                </button>
-              </div>
-              <ol className="timeline-list">
-                {selectedItems.map((item) => (
-                  <li key={item.id} className={item.id === whereAmI.activeItemId ? 'is-current' : ''}>
-                    <div className="time">
-                      {item.startTime}
-                      {item.endTime ? `-${item.endTime}` : '+'}
-                    </div>
-                    <div className="body">
-                      <strong>{item.title}</strong>
-                      <p>{item.location}</p>
-                      <small>{item.notes}</small>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </article>
-
-            <article className={`card ${panelHiddenClass('now')}`}>
-              <h2>Where Are They?</h2>
-              <p>Use manual override if GPS is denied or inaccurate.</p>
-              {!autoLocateEnabled ? (
-                <p className="hint">Tip: enable “Locate + Auto Refresh” in the header for automatic updates every 5 minutes.</p>
-              ) : null}
-              <div className="row">
-                <label htmlFor="manual-day">Day</label>
-                <select id="manual-day" value={manualDayId} onChange={(event) => setManualDayId(event.target.value)}>
-                  <option value="">Select day</option>
-                  {tripPlan.days.map((day) => (
-                    <option key={day.date} value={day.date}>
-                      {dayOptionLabel(day, todayDate)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="row">
-                <label htmlFor="manual-item">Stop/Item</label>
-                <select id="manual-item" value={manualItemId} onChange={(event) => setManualItemId(event.target.value)}>
-                  <option value="">Auto choose</option>
-                  {itemOptionsForManual.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.startTime} {item.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="button-row">
-                <button onClick={setManualOverride} disabled={!manualDayId}>
-                  Apply Manual Override
-                </button>
-                <button onClick={clearManualOverride}>Use Auto Detection</button>
-              </div>
-            </article>
-
-            <article className={`card ${panelHiddenClass('recs')}`}>
-              <h2>Quick Recommendations</h2>
-              {!recommendationsEnabled ? (
-                <p className="hint">Recommendations are unavailable in the current runtime mode.</p>
-              ) : null}
-              <div className="button-row">
-                {(['sights', 'food', 'coffee', 'rest'] as RecCategory[]).map((category) => (
-                  <button
-                    key={category}
-                    className={activeCategory === category ? 'active' : ''}
-                    onClick={() => fetchRecommendations(category)}
-                    disabled={recommendationLoading || !recommendationsEnabled}
-                  >
-                    {CATEGORY_LABEL[category]}
-                  </button>
-                ))}
-              </div>
-              {recommendationLoading ? <p className="hint">Loading recommendations...</p> : null}
-              {recommendationError ? (
-                <div className="inline-error-actions">
-                  <p className="error-text" role="alert">
-                    {recommendationError}
-                  </p>
-                  <button type="button" className="secondary-btn" onClick={retryRecommendationRequest} disabled={!lastRecommendationCategory}>
-                    Retry
-                  </button>
-                </div>
-              ) : null}
-              <ul className="recommendation-list">
-                {recommendations.map((item) => (
-                  <li key={item.placeId}>
-                    <strong>{item.name}</strong>
-                    <span>
-                      {item.distanceMeters}m | {item.rating ? `⭐ ${item.rating}` : 'No rating'} |{' '}
-                      {item.openNow === null ? 'Hours unknown' : item.openNow ? 'Open now' : 'Closed now'}
-                    </span>
-                    <a href={item.mapsUrl} target="_blank" rel="noreferrer">
-                      Open map
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </article>
-
-            <article className={`card ${panelHiddenClass('recs')}`}>
-              <h2>Ask Live Suggestions</h2>
-              {!chatEnabled ? <p className="hint">Chat is unavailable in the current runtime mode.</p> : null}
-              <form onSubmit={submitChat} className="chat-form">
-                <label htmlFor="chat-question">Question</label>
-                <textarea
-                  id="chat-question"
-                  value={chatQuestion}
-                  onChange={(event) => setChatQuestion(event.target.value)}
-                  placeholder="Ask: What should we see nearby for the next 2 hours?"
-                  disabled={!chatEnabled}
-                  required
-                />
-                <button type="submit" disabled={chatLoading || !chatEnabled}>
-                  {chatLoading ? 'Thinking...' : 'Ask'}
-                </button>
-              </form>
-              {chatError ? (
-                <div className="inline-error-actions">
-                  <p className="error-text" role="alert">
-                    {chatError}
-                  </p>
-                  <button type="button" className="secondary-btn" onClick={retryChatRequest} disabled={!lastChatQuestion || chatLoading}>
-                    Retry
-                  </button>
-                </div>
-              ) : null}
-              {chatAnswer ? <p className="chat-answer">{chatAnswer}</p> : null}
-            </article>
-
-            <article className={`card ${panelHiddenClass('plan')}`}>
-              <h2>Upload Detailed Itinerary</h2>
-              <p>Upload -&gt; Review -&gt; Apply. Supported: PDF, DOCX, DOC, TXT.</p>
-              <div className="row">
-                <label htmlFor="itinerary-upload">Upload itinerary file</label>
-                <input
-                  id="itinerary-upload"
-                  type="file"
-                  accept=".pdf,.docx,.doc,.txt"
-                  onChange={handleExtractUpload}
-                  disabled={extracting || !extractEnabled}
-                  aria-describedby="itinerary-upload-help"
-                />
-                <small id="itinerary-upload-help">
-                  {extractEnabled
-                    ? 'Detailed files are parsed into a review patch before anything is saved.'
-                    : 'Upload parsing requires backend mode. Configure VITE_API_BASE_URL to enable extraction.'}
-                </small>
-              </div>
-              {extracting ? <p>Parsing document...</p> : null}
-              {uploadError ? (
-                <div className="inline-error-actions">
-                  <p className="error-text" role="alert">
-                    {uploadError}
-                  </p>
-                  <button type="button" className="secondary-btn" onClick={() => setUploadError(null)}>
-                    Try Another File
-                  </button>
-                </div>
-              ) : null}
-
-              {pendingPatch ? (
-                <div className="review-box">
-                  <p>
-                    <strong>{pendingPatch.fileName}</strong> ({pendingPatch.documentId})
-                  </p>
-                  <p>
-                    Confidence: {Math.round(pendingPatch.patch.parseConfidence * 100)}% | Days added:{' '}
-                    {pendingPatch.patch.daysAdded.length} | Days updated: {pendingPatch.patch.daysUpdated.length}
-                  </p>
-                  <p className="hint">
-                    Impacted dates:{' '}
-                    {[...pendingPatch.patch.daysAdded, ...pendingPatch.patch.daysUpdated]
-                      .map((day) => day.date)
-                      .slice(0, 6)
-                      .join(', ') || 'None'}
-                  </p>
-                  {pendingPatch.warnings.length > 0 ? (
-                    <ul>
-                      {pendingPatch.warnings.map((warning) => (
-                        <li key={warning}>{warning}</li>
+          {activeAppTab === 'trip_overview' ? (
+            <>
+              <section className="trip-overview-grid">
+                <article className="card">
+                  <h2>Trip Timeline</h2>
+                  <p>Jump by date or region. The map stays on your full plan.</p>
+                  <div className="row">
+                    <label htmlFor="overview-day-select">Date jump</label>
+                    <select
+                      id="overview-day-select"
+                      value={selectedDate}
+                      onChange={(event) => setDateOnly(event.target.value)}
+                    >
+                      {tripPlan.days.map((day) => (
+                        <option key={day.date} value={day.date}>
+                          {dayOptionLabel(day, todayDate)}
+                        </option>
                       ))}
-                    </ul>
-                  ) : null}
-                  <div className="button-row">
-                    <button onClick={applyPendingPatch}>Apply Merge</button>
-                    <button onClick={discardPendingPatch}>Discard</button>
+                    </select>
                   </div>
-                </div>
-              ) : null}
-            </article>
+                  <div className="row">
+                    <label htmlFor="overview-region-select">Region jump</label>
+                    <select
+                      id="overview-region-select"
+                      value={selectedDay.region}
+                      onChange={(event) => {
+                        const next = tripPlan.days.find((day) => day.region === event.target.value);
+                        if (next) setDateOnly(next.date);
+                      }}
+                    >
+                      {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
+                        <option key={region} value={region}>
+                          {region}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-            <article className={`card ${panelHiddenClass('plan')}`}>
-              <h2>Source Documents</h2>
-              {tripPlan.sources.length === 0 ? (
-                <p className="hint">No source documents merged yet.</p>
-              ) : (
-                <ul className="source-list">
-                  {tripPlan.sources.slice(0, 8).map((source) => (
-                    <li key={source.id}>
-                      <strong>{source.name}</strong>
-                      <span>
-                        {new Date(source.uploadedAt).toLocaleDateString()} | {source.status} | {source.coversDates.length} day(s)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </article>
-          </section>
-          </>
-        )}
+                  <ul className="day-overview-list">
+                    {tripPlan.days.map((day) => (
+                      <li
+                        key={`overview-day-${day.date}`}
+                        className={`day-row ${day.date === todayDate ? 'is-today' : ''} ${day.date === selectedDate ? 'is-selected' : ''}`}
+                      >
+                        <button type="button" className="day-row-button" onClick={() => setDateAndOpenDayDetail(day.date)}>
+                          <span>{formatDateLabel(day.date)}</span>
+                          <small>{day.region}</small>
+                        </button>
+                        <div className="day-row-tags">
+                          {dayHasPhotos(day) ? <span className="photo-tag">Pics</span> : null}
+                          {day.date === todayDate ? <span className="today-tag">Today</span> : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+
+                <article className="card">
+                  <h2>Region Legs</h2>
+                  <ul className="region-overview-list">
+                    {regionSegments.map((segment) => (
+                      <li
+                        key={segment.id}
+                        className={`region-row ${todayDate >= segment.startDate && todayDate <= segment.endDate ? 'is-today' : ''}`}
+                      >
+                        <div>
+                          <strong>{segment.region}</strong>
+                          <p>
+                            {formatDateLabel(segment.startDate)} to {formatDateLabel(segment.endDate)} ({segment.days}{' '}
+                            {segment.days === 1 ? 'day' : 'days'})
+                          </p>
+                          {todayDate >= segment.startDate && todayDate <= segment.endDate ? (
+                            <span className="today-tag">Current Region</span>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDateAndOpenDayDetail(segment.startDate);
+                          }}
+                        >
+                          Open Day
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+
+                {renderActualMomentsCard('', fullTripPhotoRows)}
+              </section>
+              </>
+          ) : (
+            <>
+              <section className="dashboard-grid secondary-grid">
+                <article className={`card ${panelHiddenClass('plan')}`}>
+                  <h2>Day Timeline</h2>
+                  <div className="toggle-row">
+                    <button
+                      type="button"
+                      className={selectedDay.activeView === 'detail' ? 'active' : ''}
+                      disabled={selectedDay.detailItems.length === 0}
+                      onClick={() => setDayViewMode(selectedDay.date, 'detail')}
+                    >
+                      Detailed Plan
+                    </button>
+                    <button
+                      type="button"
+                      className={selectedDay.activeView === 'summary' ? 'active' : ''}
+                      onClick={() => setDayViewMode(selectedDay.date, 'summary')}
+                    >
+                      Trip Summary
+                    </button>
+                  </div>
+                  <section
+                    className={`day-annotations ${selectedDayAnnotations.length === 0 ? 'is-empty' : ''}`}
+                    aria-label="Dad updates"
+                  >
+                    <div className="day-annotations-header">
+                      <h3>Dad Updates</h3>
+                      <span className="day-annotations-count">{selectedDayAnnotations.length}</span>
+                    </div>
+                    <p className="day-annotations-subtitle">Highlighted notes from dad&apos;s family-thread updates.</p>
+                    {selectedDayAnnotations.length > 0 ? (
+                      <ul className="day-annotation-list">
+                        {selectedDayAnnotations.map((annotation) => (
+                          <li key={annotation.id}>
+                            <div className="day-annotation-meta">
+                              <span className="day-annotation-tag">Dad note</span>
+                              <span className="pill">{annotation.whenLabel}</span>
+                            </div>
+                            <p>{annotation.text}</p>
+                            <small>{annotation.source}</small>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="day-annotations-empty">No dad updates logged for {formatDateLabel(selectedDate)}.</p>
+                    )}
+                  </section>
+                  <ol className="timeline-list">
+                    {selectedItems.map((item) => (
+                      <li key={item.id} className={item.id === whereAmI.activeItemId ? 'is-current' : ''}>
+                        <div className="time">
+                          {item.startTime}
+                          {item.endTime ? `-${item.endTime}` : '+'}
+                        </div>
+                        <div className="body">
+                          <strong>{item.title}</strong>
+                          <p>{item.location}</p>
+                          <small>{item.notes}</small>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </article>
+
+                {renderActualMomentsCard(
+                  `focus-moments ${panelHiddenClass('plan')}`,
+                  visibleActualMoments,
+                  visibleActualMomentsUsesRecent,
+                )}
+              </section>
+            </>
+          )}
+        </section>
 
       </section>
 

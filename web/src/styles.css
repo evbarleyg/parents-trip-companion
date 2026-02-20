@@ -265,6 +265,15 @@ body,
   gap: 12px;
 }
 
+.primary-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.primary-map {
+  min-width: 0;
+}
+
 .day-context-bar {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -285,6 +294,13 @@ body,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 .day-focus-grid {
@@ -451,6 +467,128 @@ a:focus-visible {
   list-style: none;
   display: grid;
   gap: 8px;
+}
+
+.day-annotations {
+  margin: 0 0 12px;
+  border: 2px solid #b35c1f;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #fff6ea 0%, #fffdf8 100%);
+  box-shadow: 0 8px 18px rgba(78, 47, 20, 0.08);
+  padding: 10px;
+}
+
+.day-annotations.is-empty {
+  border-color: #c0ced9;
+  background: #f5f8fb;
+  box-shadow: none;
+}
+
+.day-annotations-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.day-annotations h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #5a2f12;
+}
+
+.day-annotations-count {
+  min-width: 28px;
+  border-radius: 999px;
+  border: 1px solid #9e4f1a;
+  background: #b35c1f;
+  color: #fff6ee;
+  font-size: 0.84rem;
+  font-weight: 700;
+  text-align: center;
+  padding: 3px 8px;
+}
+
+.day-annotations-subtitle {
+  margin: 0 0 8px;
+  color: #6d421e;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.day-annotations.is-empty .day-annotations-subtitle {
+  color: #3d5d75;
+}
+
+.day-annotation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.day-annotation-list li {
+  border: 1px solid #d99b66;
+  border-left: 6px solid #b35c1f;
+  border-radius: 10px;
+  background: #fffaf3;
+  padding: 8px 10px;
+}
+
+.day-annotation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.day-annotation-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid #9e4f1a;
+  background: #b35c1f;
+  color: #fff6ee;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+}
+
+.day-annotation-meta .pill {
+  border-color: #d9b28f;
+  background: #fff0de;
+  color: #55321a;
+  font-weight: 700;
+}
+
+.day-annotation-list small {
+  display: block;
+  margin-top: 6px;
+  color: #33526b;
+  font-weight: 600;
+  font-size: 0.77rem;
+}
+
+.day-annotation-list p {
+  margin: 0;
+  color: #243a4a;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.day-annotations-empty {
+  margin: 0;
+  border: 1px dashed #aebfcd;
+  border-radius: 9px;
+  background: #ffffff;
+  padding: 8px 10px;
+  color: #35556e;
+  font-size: 0.86rem;
+  font-weight: 600;
 }
 
 .timeline-list li {
@@ -900,6 +1038,10 @@ a:focus-visible {
   .trip-overview-grid,
   .dashboard-grid,
   .day-focus-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tools-grid {
     grid-template-columns: 1fr;
   }
 

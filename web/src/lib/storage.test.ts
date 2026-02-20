@@ -28,4 +28,27 @@ describe('day view mode persistence', () => {
     saveMobilePanel('map');
     expect(loadMobilePanel()).toBe('map');
   });
+
+  it('falls back when stored app tab is invalid', () => {
+    localStorage.clear();
+    localStorage.setItem('ptc_app_tab_v1', 'timeline');
+    expect(loadAppViewTab()).toBe('day_detail');
+  });
+
+  it('falls back when stored mobile panel is invalid', () => {
+    localStorage.clear();
+    localStorage.setItem('ptc_mobile_panel_v1', 'timeline');
+    expect(loadMobilePanel()).toBe('plan');
+  });
+
+  it('retains persisted values without schema changes', () => {
+    localStorage.clear();
+    saveAppViewTab('trip_overview');
+    saveMobilePanel('plan');
+    saveDayViewModes({ '2026-02-18': 'summary' });
+
+    expect(loadAppViewTab()).toBe('trip_overview');
+    expect(loadMobilePanel()).toBe('plan');
+    expect(loadDayViewModes()['2026-02-18']).toBe('summary');
+  });
 });
