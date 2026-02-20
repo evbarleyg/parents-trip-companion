@@ -9,6 +9,17 @@ interface DayGeo {
   lng: number;
 }
 
+// Dad's numbered text notes are pinned to itinerary dates.
+// #1 is explicitly the Saturday Dubai note; the remaining notes follow itinerary sequence.
+export const DAD_ITINERARY_TEXT_UPDATE_DATES: Record<number, string> = {
+  1: '2026-02-07',
+  2: '2026-02-08',
+  3: '2026-02-10',
+  4: '2026-02-13',
+  6: '2026-02-16',
+  7: '2026-02-19',
+};
+
 const GEO_BY_DATE: Record<string, DayGeo> = {
   '2026-02-05': { region: 'Dubai Creek', lat: 25.2637, lng: 55.3075 },
   '2026-02-07': { region: 'Downtown Dubai', lat: 25.1972, lng: 55.2744 },
@@ -27,42 +38,42 @@ const DAD_TEXT_UPDATES: Record<string, Array<{ id: string; whenLabel: string; te
   '2026-02-07': [
     {
       id: 'dad-text-2026-02-07-number-1',
-      whenLabel: 'Sat, Feb 7 - Dad update #1',
+      whenLabel: 'Sat, Feb 7 - Dubai - Dad update #1',
       text: 'It is early Saturday in Dubai. We are adjusting to the time shift, staying in Jumeirah Beach, and heading out for boat transit water sites before moving on to Abu Dhabi tomorrow.',
     },
   ],
   '2026-02-08': [
     {
       id: 'dad-text-2026-02-08-number-2',
-      whenLabel: 'Sun, Feb 8 - Dad update #2',
+      whenLabel: 'Sun, Feb 8 - Dubai to Abu Dhabi - Dad update #2',
       text: 'Sunday morning update from Dubai before taxi to Abu Dhabi. Notes mention boat ride around the Palm, Dubai Mall and Burj Khalifa, then Louvre Abu Dhabi and Super Bowl watch planning.',
     },
   ],
   '2026-02-10': [
     {
       id: 'dad-text-2026-02-10-number-3',
-      whenLabel: 'Tue, Feb 10 - Dad update #3',
+      whenLabel: 'Tue, Feb 10 - Al Maha to Dubai - Dad update #3',
       text: 'Good morning from Al Maha Desert Conservation Reserve. After Abu Dhabi and Super Bowl celebration, the plan was birding at Al Maha before returning to urban Dubai to meet the Oman tour group.',
     },
   ],
   '2026-02-13': [
     {
       id: 'dad-text-2026-02-13-number-4',
-      whenLabel: 'Fri, Feb 13 - Dad update #4',
+      whenLabel: 'Fri, Feb 13 - Salalah Mountains day - Dad update #4',
       text: 'Good morning from Salalah, Oman. Notes mention mosque, archaeology sites, coast, and a camel farm stop where Susan milked a camel before a Salalah mountain 4x4 day.',
     },
   ],
   '2026-02-16': [
     {
       id: 'dad-text-2026-02-16-number-6',
-      whenLabel: 'Mon, Feb 16 - Dad update #6',
+      whenLabel: 'Mon, Feb 16 - Muscat to Wahiba Sands - Dad update #6',
       text: 'Good morning from Muscat. They had arrived two days earlier from Salalah and were leaving for desert days, with references to ruins, souk scenes, snorkeling island, and Ramadan decorations.',
     },
   ],
   '2026-02-19': [
     {
       id: 'dad-text-2026-02-19-number-7',
-      whenLabel: 'Thu, Feb 19 - Dad update #7',
+      whenLabel: 'Thu, Feb 19 - Jebel Akhdar/Jebel Shams - Dad update #7',
       text: 'Hello from Jebel Akhdar at 6,000 feet. Third night in the mountain area before heading back toward Muscat after valley tours, mountain hikes, and hotel time above canyon views.',
     },
   ],

@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { getActualMomentsForDate, getAllSeedActualMoments } from './actualMoments';
-import { DAD_ACTUAL_MOMENTS_BY_DATE } from './actualMomentsDad';
+import { DAD_ACTUAL_MOMENTS_BY_DATE, DAD_ITINERARY_TEXT_UPDATE_DATES } from './actualMomentsDad';
 
 const DATA_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_PUBLIC_DIR = path.resolve(DATA_DIR, '../../public');
@@ -31,6 +31,15 @@ describe('actual moments seed data', () => {
     const moments = getActualMomentsForDate(dadDate);
     expect(dadMomentId).toBeTruthy();
     expect(moments.some((moment) => moment.id === dadMomentId)).toBe(true);
+  });
+
+  it('pins dad numbered text updates to itinerary dates', () => {
+    for (const [updateNumber, date] of Object.entries(DAD_ITINERARY_TEXT_UPDATE_DATES)) {
+      const moments = getActualMomentsForDate(date);
+      expect(
+        moments.some((moment) => moment.id.endsWith(`number-${updateNumber}`) && moment.source.toLowerCase().includes('dad updates')),
+      ).toBe(true);
+    }
   });
 
   it('keeps moment and photo IDs unique across merged datasets', () => {
