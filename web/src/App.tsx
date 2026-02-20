@@ -47,6 +47,7 @@ import type {
   AppViewTab,
   CapabilitiesResponse,
   TripActualMoment,
+  TripActualPhoto,
   MapStatus,
   MobilePanel,
   SourceDocument,
@@ -139,18 +140,39 @@ function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripAct
     });
 }
 
+function dedupePhotos(photos: TripActualPhoto[]): TripActualPhoto[] {
+  const seen = new Set<string>();
+  const deduped: TripActualPhoto[] = [];
+
+  for (const photo of photos) {
+    const key = photo.id || photo.src;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(photo);
+  }
+
+  return deduped;
+}
+
 function mergeActualMoments(
   restoredMoments: TripActualMoment[] | undefined,
   seedMoments: TripActualMoment[] | undefined,
 ): TripActualMoment[] {
   const mergedById = new Map<string, TripActualMoment>();
 
-  for (const moment of sanitizeActualMoments(seedMoments)) {
-    mergedById.set(moment.id, moment);
-  }
+  // Restore first, then fold in seed so stale local cache cannot hide newer shipped photos.
+  for (const moment of [...sanitizeActualMoments(restoredMoments), ...sanitizeActualMoments(seedMoments)]) {
+    const existing = mergedById.get(moment.id);
+    if (!existing) {
+      mergedById.set(moment.id, moment);
+      continue;
+    }
 
-  for (const moment of sanitizeActualMoments(restoredMoments)) {
-    mergedById.set(moment.id, moment);
+    mergedById.set(moment.id, {
+      ...existing,
+      ...moment,
+      photos: dedupePhotos([...existing.photos, ...moment.photos]),
+    });
   }
 
   return [...mergedById.values()];
