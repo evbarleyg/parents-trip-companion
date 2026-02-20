@@ -5,6 +5,7 @@ import {
   getRuntimeCapabilities,
   unlockPasscode,
 } from './lib/api';
+import { resolvePublicAssetUrl } from './lib/asset-url';
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
 import { formatDateLabel, slugify } from './lib/format';
 import { getTodayInTripRange } from './lib/date';
@@ -64,6 +65,7 @@ const MOBILE_BREAKPOINT = 980;
 const APP_TAB_LABEL: Record<AppViewTab, string> = {
   trip_overview: 'Full Trip',
   day_detail: 'Day Details',
+  photo_gallery: 'Photo Gallery',
 };
 
 const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
@@ -106,6 +108,8 @@ interface DayAnnotationRow {
   whenLabel: string;
   text: string;
 }
+
+type PhotoScope = 'selected_day' | 'full_trip';
 
 const REMOVED_PHOTO_FILE_MARKERS = ['img_4017.jpeg', 'img_4024.jpeg', 'img_4041.jpeg'];
 
@@ -236,8 +240,6 @@ function buildRegionSegments(days: TripDay[]): RegionSegment[] {
 }
 
 const AUTO_UNLOCK_PASSCODE = 'SusanJim2026';
-const MAX_TRIP_PHOTO_FALLBACK = 20;
-
 export function App() {
   const [session, setSession] = useState<UnlockResponse>(() => ensureOpenSession(loadSession, saveSession));
   const [runtimeCapabilities, setRuntimeCapabilities] = useState<CapabilitiesResponse>({
@@ -268,6 +270,7 @@ export function App() {
 
   const initialAppTab = useMemo(() => loadAppViewTab(), []);
   const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(initialAppTab);
+  const [photoScope, setPhotoScope] = useState<PhotoScope>('selected_day');
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
   const [mapScopeByTab, setMapScopeByTab] = useState<MapScopeByTab>(() => {
     const defaults = getDefaultMapScopes();
@@ -334,17 +337,15 @@ export function App() {
         })),
     [selectedActualMoments],
   );
-  const selectedDayHasPhotos = dayHasPhotos(selectedDay);
   const selectedDayPhotoCount = dayPhotoCount(selectedDay);
   const selectedActualMomentRows = useMemo(
     () => selectedActualMoments.map((moment) => ({ date: selectedDate, moment })),
     [selectedDate, selectedActualMoments],
   );
-  const selectedActualMomentIds = useMemo(
-    () => new Set(selectedActualMoments.map((moment) => moment.id)),
-    [selectedActualMoments],
+  const selectedDayPhotoRows = useMemo(
+    () => selectedActualMomentRows.filter((row) => row.moment.photos.length > 0),
+    [selectedActualMomentRows],
   );
-  const selectedDateMs = useMemo(() => Date.parse(`${selectedDate}T00:00:00Z`), [selectedDate]);
   const photoDates = useMemo(
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
@@ -360,43 +361,11 @@ export function App() {
       .sort((a, b) => b.date.localeCompare(a.date)),
     [tripPlan.days],
   );
-  const nearbyTripPhotoRows = useMemo(() => {
-    const hasSelectedTimestamp = Number.isFinite(selectedDateMs);
-    return tripPhotoMomentRows
-      .filter((row) => !selectedActualMomentIds.has(row.moment.id))
-      .sort((a, b) => {
-        if (!hasSelectedTimestamp) {
-          return b.date.localeCompare(a.date);
-        }
-
-        const aDistance = Math.abs(Date.parse(`${a.date}T00:00:00Z`) - selectedDateMs);
-        const bDistance = Math.abs(Date.parse(`${b.date}T00:00:00Z`) - selectedDateMs);
-        if (aDistance === bDistance) {
-          return b.date.localeCompare(a.date);
-        }
-        return aDistance - bDistance;
-      });
-  }, [selectedActualMomentIds, selectedDateMs, tripPhotoMomentRows]);
   const fullTripPhotoRows = useMemo(() => tripPhotoMomentRows, [tripPhotoMomentRows]);
-  const visibleActualMoments = useMemo(() => {
-    if (selectedActualMoments.some((moment) => moment.photos.length > 0)) {
-      return selectedActualMomentRows.concat(nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK));
-    }
-
-    if (nearbyTripPhotoRows.length > 0) {
-      const withSelectedText = selectedActualMomentRows.slice(0, 4);
-      return withSelectedText.length > 0
-        ? withSelectedText.concat(nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK))
-        : nearbyTripPhotoRows.slice(0, MAX_TRIP_PHOTO_FALLBACK);
-    }
-
-    return selectedActualMomentRows;
-  }, [
-    nearbyTripPhotoRows,
-    selectedActualMoments,
-    selectedActualMomentRows,
-  ]);
-  const visibleActualMomentsUsesRecent = !selectedActualMoments.some((moment) => moment.photos.length > 0);
+  const galleryPhotoRows = useMemo(
+    () => (photoScope === 'selected_day' ? selectedDayPhotoRows : fullTripPhotoRows),
+    [fullTripPhotoRows, photoScope, selectedDayPhotoRows],
+  );
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (activeMapScope === 'day') {
@@ -1132,10 +1101,10 @@ export function App() {
               </div>
                 <p>{row.moment.text}</p>
                 {row.moment.photos.length > 0 ? (
-                  <div className="actual-photo-grid">
+                    <div className="actual-photo-grid">
                     {row.moment.photos.map((photo) => (
                     <figure key={photo.id} className="actual-photo-card">
-                      <img src={photo.src} alt={photo.alt} loading="lazy" />
+                      <img src={resolvePublicAssetUrl(photo.src, import.meta.env.BASE_URL)} alt={photo.alt} loading="lazy" />
                       <figcaption>{photo.caption}</figcaption>
                       </figure>
                     ))}
@@ -1253,7 +1222,7 @@ export function App() {
 
       <section className="title-toolbar" aria-label="Trip controls">
         <nav className="toolbar-tabs" aria-label="Primary view tabs">
-          {(['trip_overview', 'day_detail'] as AppViewTab[]).map((tab) => (
+          {(['trip_overview', 'day_detail', 'photo_gallery'] as AppViewTab[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -1266,7 +1235,7 @@ export function App() {
         </nav>
 
         <div className="toolbar-pill-row">
-          {activeAppTab === 'day_detail' ? (
+          {activeAppTab === 'day_detail' || activeAppTab === 'photo_gallery' ? (
             <>
               <details className="toolbar-popover">
                 <summary>{formatDateLabel(selectedDate)}</summary>
@@ -1307,32 +1276,27 @@ export function App() {
                 </div>
               </details>
 
-              <button type="button" className="secondary-btn" onClick={() => setDayViewMode(selectedDay.date, selectedDay.activeView === 'detail' ? 'summary' : 'detail')}>
-                {dayModeLabel}
-              </button>
-
-              {selectedDayHasPhotos ? (
+              {activeAppTab === 'day_detail' ? (
                 <button
                   type="button"
                   className="secondary-btn"
-                  onClick={() => {
-                    setAppTab('day_detail');
-                    if (isMobile) setMobilePanel('plan');
-                  }}
+                  onClick={() => setDayViewMode(selectedDay.date, selectedDay.activeView === 'detail' ? 'summary' : 'detail')}
                 >
-                  Photos ({selectedDayPhotoCount})
+                  {dayModeLabel}
                 </button>
               ) : null}
             </>
           ) : null}
 
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
-          >
-            Map: {MAP_SCOPE_LABEL[activeMapScope]}
-          </button>
+          {activeAppTab !== 'photo_gallery' ? (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
+            >
+              Map: {MAP_SCOPE_LABEL[activeMapScope]}
+            </button>
+          ) : null}
 
           <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
             Back to Today
@@ -1384,7 +1348,9 @@ export function App() {
         ) : null}
 
         <section className="primary-layout">
-          {renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)}
+          {activeAppTab !== 'photo_gallery'
+            ? renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)
+            : null}
 
           {activeAppTab === 'trip_overview' ? (
             <>
@@ -1473,13 +1439,45 @@ export function App() {
                     ))}
                   </ul>
                 </article>
-
-                {renderActualMomentsCard('', fullTripPhotoRows)}
               </section>
-              </>
-          ) : (
+            </>
+          ) : activeAppTab === 'photo_gallery' ? (
             <>
               <section className="dashboard-grid secondary-grid">
+                <article className="card">
+                  <h2>Photo Scope</h2>
+                  <p className="hint">Use one filter to switch between selected-day photos and the full trip.</p>
+                  <div className="toggle-row">
+                    <button
+                      type="button"
+                      className={photoScope === 'selected_day' ? 'active' : ''}
+                      onClick={() => setPhotoScope('selected_day')}
+                    >
+                      Selected Day ({selectedDayPhotoCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={photoScope === 'full_trip' ? 'active' : ''}
+                      onClick={() => setPhotoScope('full_trip')}
+                    >
+                      Full Trip ({fullTripPhotoRows.length})
+                    </button>
+                  </div>
+                  {photoScope === 'selected_day' ? (
+                    <p className="hint">
+                      Showing photos for {formatDateLabel(selectedDate)} ({selectedDay.region}).
+                    </p>
+                  ) : (
+                    <p className="hint">Showing mapped photo moments across all trip dates.</p>
+                  )}
+                </article>
+
+                {renderActualMomentsCard('', galleryPhotoRows)}
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="dashboard-grid secondary-grid single-column">
                 <article className={`card ${panelHiddenClass('plan')}`}>
                   <h2>Day Timeline</h2>
                   <div className="toggle-row">
@@ -1541,12 +1539,6 @@ export function App() {
                     ))}
                   </ol>
                 </article>
-
-                {renderActualMomentsCard(
-                  `focus-moments ${panelHiddenClass('plan')}`,
-                  visibleActualMoments,
-                  visibleActualMomentsUsesRecent,
-                )}
               </section>
             </>
           )}

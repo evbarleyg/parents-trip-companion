@@ -322,6 +322,10 @@ body,
   align-items: start;
 }
 
+.dashboard-grid.single-column {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .card {
   border: 1px solid var(--border);
   border-radius: 14px;
