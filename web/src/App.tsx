@@ -74,10 +74,16 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 };
 
 type LeafletModule = typeof import('leaflet');
+type MapStyle = 'road' | 'hybrid';
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
   day: 'Selected Day',
   trip: 'Full Trip',
+};
+
+const MAP_STYLE_LABEL: Record<MapStyle, string> = {
+  road: 'Road',
+  hybrid: 'Satellite + Roads',
 };
 
 interface RegionSegment {
@@ -159,6 +165,57 @@ function regionColor(region: string): string {
   if (key.includes('morocco')) return '#7b5d28';
   if (key.includes('travel') || key.includes('transit')) return '#516178';
   return '#365e8d';
+}
+
+function parseTripDateMs(date: string): number {
+  return Date.parse(`${date}T00:00:00Z`);
+}
+
+function clamp01(value: number): number {
+  if (value <= 0) return 0;
+  if (value >= 1) return 1;
+  return value;
+}
+
+function blendHexColors(startHex: string, endHex: string, ratio: number): string {
+  const t = clamp01(ratio);
+  const start = Number.parseInt(startHex.slice(1), 16);
+  const end = Number.parseInt(endHex.slice(1), 16);
+
+  const sr = (start >> 16) & 0xff;
+  const sg = (start >> 8) & 0xff;
+  const sb = start & 0xff;
+
+  const er = (end >> 16) & 0xff;
+  const eg = (end >> 8) & 0xff;
+  const eb = end & 0xff;
+
+  const r = Math.round(sr + (er - sr) * t);
+  const g = Math.round(sg + (eg - sg) * t);
+  const b = Math.round(sb + (eb - sb) * t);
+
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function seasonalTripLineColor(date: string, startDate: string, endDate: string): string {
+  const winter = '#5e7fb4';
+  const thaw = '#5aa7ba';
+  const spring = '#78c56f';
+
+  const startMs = parseTripDateMs(startDate);
+  const endMs = parseTripDateMs(endDate);
+  const dateMs = parseTripDateMs(date);
+
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || !Number.isFinite(dateMs) || endMs <= startMs) {
+    return thaw;
+  }
+
+  const progress = clamp01((dateMs - startMs) / (endMs - startMs));
+  if (progress <= 0.5) {
+    return blendHexColors(winter, thaw, progress / 0.5);
+  }
+
+  return blendHexColors(thaw, spring, (progress - 0.5) / 0.5);
 }
 
 function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode>): TripPlan {
@@ -278,6 +335,7 @@ export function App() {
     return defaults;
   });
   const activeMapScope = resolveActiveMapScope(activeAppTab, mapScopeByTab);
+  const [mapStyle, setMapStyle] = useState<MapStyle>('road');
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -301,6 +359,9 @@ export function App() {
 
   const mapRef = useRef<Leaflet.Map | null>(null);
   const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const roadBaseLayerRef = useRef<Leaflet.TileLayer | null>(null);
+  const satelliteLayerRef = useRef<Leaflet.TileLayer | null>(null);
+  const roadOverlayLayerRef = useRef<Leaflet.TileLayer | null>(null);
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
@@ -646,13 +707,28 @@ export function App() {
           preferCanvas: true,
         }).setView([26, 20], 3);
 
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const roadBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '&copy; OpenStreetMap contributors',
-        }).addTo(map);
+        });
+        const satelliteLayer = L.tileLayer(
+          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          {
+            attribution: 'Tiles &copy; Esri',
+          },
+        );
+        const roadOverlayLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '&copy; OpenStreetMap contributors',
+          opacity: 0.38,
+        });
+
+        roadBaseLayer.addTo(map);
 
         const markerLayer = L.layerGroup().addTo(map);
         mapRef.current = map;
         markerLayerRef.current = markerLayer;
+        roadBaseLayerRef.current = roadBaseLayer;
+        satelliteLayerRef.current = satelliteLayer;
+        roadOverlayLayerRef.current = roadOverlayLayer;
 
         settleRafId = window.requestAnimationFrame(() => {
           if (cancelled) return;
@@ -681,11 +757,34 @@ export function App() {
 
       mapRef.current = null;
       markerLayerRef.current = null;
+      roadBaseLayerRef.current = null;
+      satelliteLayerRef.current = null;
+      roadOverlayLayerRef.current = null;
       if (mapContainerRef.current === container) {
         mapContainerRef.current = null;
       }
     };
   }, [leafletModule, mapMountVersion, invalidateMap]);
+
+  useEffect(() => {
+    if (mapStatus !== 'ready' || !mapRef.current) return;
+
+    const map = mapRef.current;
+    const roadBaseLayer = roadBaseLayerRef.current;
+    const satelliteLayer = satelliteLayerRef.current;
+    const roadOverlayLayer = roadOverlayLayerRef.current;
+    if (!roadBaseLayer || !satelliteLayer || !roadOverlayLayer) return;
+
+    if (mapStyle === 'hybrid') {
+      if (map.hasLayer(roadBaseLayer)) map.removeLayer(roadBaseLayer);
+      if (!map.hasLayer(satelliteLayer)) map.addLayer(satelliteLayer);
+      if (!map.hasLayer(roadOverlayLayer)) map.addLayer(roadOverlayLayer);
+    } else {
+      if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
+      if (map.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer);
+      if (!map.hasLayer(roadBaseLayer)) map.addLayer(roadBaseLayer);
+    }
+  }, [mapStatus, mapStyle]);
 
   useEffect(() => {
     if (mapStatus !== 'ready') return;
@@ -738,6 +837,7 @@ export function App() {
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
       const color = regionColor(day.region);
+      const fullTripLineColor = seasonalTripLineColor(day.date, tripPlan.startDate, tripPlan.endDate);
       const isSelectedDate = day.date === selectedDate;
       const isTodayDate = day.date === todayDate;
       const hasPhotos = dayHasPhotos(day);
@@ -787,7 +887,7 @@ export function App() {
         if (activeMapScope === 'trip') {
           markerLayerRef.current.addLayer(
             L.polyline(coords, {
-              color,
+              color: fullTripLineColor,
               weight: isSelectedDate || isTodayDate ? 3.2 : 2,
               opacity: isSelectedDate || isTodayDate ? 0.9 : 0.33,
             }),
@@ -1135,6 +1235,19 @@ export function App() {
             </button>
           ))}
         </div>
+        <div className="map-style-toggle" role="group" aria-label="Map style">
+          {(['road', 'hybrid'] as MapStyle[]).map((style) => (
+            <button
+              key={style}
+              type="button"
+              className={mapStyle === style ? 'active' : ''}
+              onClick={() => setMapStyle(style)}
+              aria-pressed={mapStyle === style}
+            >
+              {MAP_STYLE_LABEL[style]}
+            </button>
+          ))}
+        </div>
         <p className="map-meta">
           {activeMapScope === 'trip'
             ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
@@ -1477,7 +1590,7 @@ export function App() {
             </>
           ) : (
             <>
-              <section className="dashboard-grid secondary-grid single-column">
+              <section className="dashboard-grid secondary-grid">
                 <article className={`card ${panelHiddenClass('plan')}`}>
                   <h2>Day Timeline</h2>
                   <div className="toggle-row">
@@ -1539,6 +1652,11 @@ export function App() {
                     ))}
                   </ol>
                 </article>
+
+                {renderActualMomentsCard(
+                  `focus-moments ${panelHiddenClass('plan')}`,
+                  selectedDayPhotoRows,
+                )}
               </section>
             </>
           )}

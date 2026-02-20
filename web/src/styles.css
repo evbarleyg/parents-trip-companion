@@ -110,7 +110,7 @@ body,
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .toolbar-pill-row > * {
@@ -123,6 +123,8 @@ body,
   background: #eef4f8;
   color: #27465f;
   padding: 0;
+  position: relative;
+  min-width: 0;
 }
 
 .toolbar-popover summary {
@@ -143,6 +145,8 @@ body,
 .toolbar-popover[open] {
   border-radius: 12px;
   width: min(360px, 100%);
+  max-width: 100%;
+  z-index: 12;
 }
 
 .toolbar-popover[open] summary {
@@ -183,6 +187,13 @@ body,
   padding: 8px 10px;
   display: grid;
   gap: 6px;
+  min-width: 0;
+}
+
+.toolbar-popover-body select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .toolbar-popover-body p {
@@ -830,6 +841,13 @@ a:focus-visible {
 }
 
 .map-scope-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.map-style-toggle {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
