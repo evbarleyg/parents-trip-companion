@@ -695,9 +695,21 @@ export function App() {
     const apply = () => setIsMobile(media.matches);
     apply();
 
-    media.addEventListener('change', apply);
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', apply);
+      return () => {
+        media.removeEventListener('change', apply);
+      };
+    }
+
+    // Safari legacy fallback (pre-addEventListener on MediaQueryList)
+    const legacyMedia = media as MediaQueryList & {
+      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+    };
+    legacyMedia.addListener?.(apply as (event: MediaQueryListEvent) => void);
     return () => {
-      media.removeEventListener('change', apply);
+      legacyMedia.removeListener?.(apply as (event: MediaQueryListEvent) => void);
     };
   }, []);
 
