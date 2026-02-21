@@ -58,6 +58,18 @@ describe('actual moments seed data', () => {
     }
   });
 
+  it('does not publish duplicate photo src entries across seeded moments', () => {
+    const allMoments = getAllSeedActualMoments();
+    const photoSrcs = new Set<string>();
+
+    for (const moment of allMoments) {
+      for (const photo of moment.photos) {
+        expect(photoSrcs.has(photo.src)).toBe(false);
+        photoSrcs.add(photo.src);
+      }
+    }
+  });
+
   it('references only photo files that exist under web/public', () => {
     const allMoments = getAllSeedActualMoments();
     for (const moment of allMoments) {

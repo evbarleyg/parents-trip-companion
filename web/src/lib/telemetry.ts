@@ -10,6 +10,7 @@ export type TelemetryEventName =
   | 'map_error'
   | 'manual_override_apply'
   | 'manual_override_clear'
+  | 'top_photo_jump'
   | 'extract_success'
   | 'extract_failure'
   | 'merge_apply'

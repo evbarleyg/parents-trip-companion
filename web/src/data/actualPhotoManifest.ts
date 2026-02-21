@@ -2,7 +2,6 @@ export const VERIFIED_ACTUAL_PHOTO_FILENAMES = [
   '79303757406-19d2462d-044b-4fc1-b12d-bf14a41a4652.jpeg',
   'desert-sunset.png',
   'dubai-wheel.png',
-  'img-1126-2.jpeg',
   'img-1126.jpeg',
   'img-1128.jpeg',
   'img-1130.jpeg',
