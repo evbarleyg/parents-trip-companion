@@ -138,6 +138,10 @@ function hasMomentMedia(moment: TripActualMoment): boolean {
   return moment.photos.length > 0 || (moment.videos?.length ?? 0) > 0;
 }
 
+function mapScopeStopLimit(scope: MapScope): number {
+  return scope === 'trip' ? 20 : 12;
+}
+
 function annotationTagFromSource(source: string): string {
   const normalized = source.toLowerCase();
   if (normalized.includes('dad updates')) return 'Dad note';
@@ -1338,13 +1342,12 @@ export function App() {
         </div>
         <p className="map-meta">
           {activeMapScope === 'trip'
-            ? 'Route overview across all itinerary days.'
+            ? 'Showing all trip days.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
 
         <div className="map-status" role="status" aria-live="polite">
           {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
-          {mapStatus === 'ready' ? <span>Map ready</span> : null}
         </div>
 
         {mapStatus === 'error' ? (
@@ -1362,19 +1365,15 @@ export function App() {
           aria-label="Trip map"
         />
 
-        <div className="map-stop-shell">
-          <h3>Keyboard Stop List</h3>
-          <p className="hint">
-            Use these buttons to move map focus without dragging.{' '}
-            {activeMapScope === 'trip' ? 'Showing first stop per day in Route Overview.' : 'Showing stops for the current day.'}
-          </p>
+        <details className="map-stop-shell">
+          <summary>Quick map jump ({Math.min(mapStops.length, mapScopeStopLimit(activeMapScope))})</summary>
           <ul className="map-stop-list">
             {mapStops.length === 0 ? (
               <li>
-                <span className="hint">No map stops with coordinates are available for this scope.</span>
+                <span className="hint">No coordinates are mapped for this view.</span>
               </li>
             ) : (
-              mapStops.slice(0, activeMapScope === 'trip' ? 20 : 12).map((stop) => (
+              mapStops.slice(0, mapScopeStopLimit(activeMapScope)).map((stop) => (
                 <li key={stop.id}>
                   <div>
                     <strong>{stop.label}</strong>
@@ -1385,13 +1384,13 @@ export function App() {
                     </small>
                   </div>
                   <button type="button" className="secondary-btn" onClick={() => focusMapStop(stop)}>
-                    Focus Map
+                    Focus
                   </button>
                 </li>
               ))
             )}
           </ul>
-        </div>
+        </details>
       </section>
     );
   }
@@ -1496,7 +1495,7 @@ export function App() {
           <details className={`toolbar-popover runtime ${runtimeCapabilities.mode}`}>
             <summary>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</summary>
             <div className="toolbar-popover-body">
-              <p>Feature: Upload extract {extractEnabled ? 'on' : 'off'}. Suggestions and chat are hidden.</p>
+              <p>Uploads: {extractEnabled ? 'on' : 'off'}. Chat and tips are limited in fallback.</p>
             </div>
           </details>
 
@@ -1516,8 +1515,7 @@ export function App() {
           <div className="toolbar-now-row">
             <span>Now: {nowAndNext.current ? nowAndNext.current.title : 'No active block'}</span>
             <span>Next: {nowAndNext.next ? nowAndNext.next.title : 'No upcoming block'}</span>
-            <span>Where am I: {whereAmI.confidence}</span>
-            <span>Mode: {whereAmI.mode}</span>
+            <span>Location confidence: {whereAmI.confidence}</span>
           </div>
         ) : null}
       </section>
