@@ -89,6 +89,26 @@ describe('App media layout regression', () => {
     );
 
     expect(mapHeadings.length).toBeGreaterThan(0);
+    expect(container.textContent).toContain('Route Overview');
+    expect(container.textContent).not.toContain('Map:');
+    expect(container.textContent).not.toContain('Road');
+    expect(container.textContent).not.toContain('Satellite + Roads');
     expect(container.textContent).not.toContain('Quickly scan photos/videos and jump to that day.');
+  });
+
+  it('shows family update notes in day details', async () => {
+    const dayDetailsTab = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Day Details',
+    );
+
+    expect(dayDetailsTab).toBeTruthy();
+
+    await act(async () => {
+      dayDetailsTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flushEffects();
+    });
+
+    expect(container.textContent).toContain('Family Updates');
+    expect(container.textContent).not.toContain('Dad Updates');
   });
 });

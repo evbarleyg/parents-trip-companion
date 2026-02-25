@@ -102,7 +102,7 @@ body,
 
 .toolbar-tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -944,13 +944,6 @@ a:focus-visible {
   margin: 0 0 10px;
 }
 
-.map-style-toggle {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0 0 10px;
-}
-
 .map-status {
   font-size: 0.84rem;
   color: #35556e;
@@ -1137,6 +1130,18 @@ a:focus-visible {
     flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 2px;
+  }
+
+  .toolbar-tabs {
+    display: flex;
+    overflow-x: auto;
+    gap: 6px;
+    padding-bottom: 2px;
+  }
+
+  .toolbar-tabs .app-tab {
+    min-width: 140px;
+    flex: 1 0 auto;
   }
 
   .top-photo-header {

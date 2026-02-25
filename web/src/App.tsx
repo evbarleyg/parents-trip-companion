@@ -76,16 +76,10 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 };
 
 type LeafletModule = typeof import('leaflet');
-type MapStyle = 'road' | 'hybrid';
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
-  day: 'Selected Day',
-  trip: 'Full Trip',
-};
-
-const MAP_STYLE_LABEL: Record<MapStyle, string> = {
-  road: 'Road',
-  hybrid: 'Satellite + Roads',
+  day: 'Day Focus',
+  trip: 'Route Overview',
 };
 
 interface RegionSegment {
@@ -112,6 +106,7 @@ interface ActualMomentRow {
 
 interface DayAnnotationRow {
   id: string;
+  tag: string;
   source: string;
   whenLabel: string;
   text: string;
@@ -141,6 +136,13 @@ function shouldRemovePhotoByMarker(photo: { src: string; alt: string; caption: s
 
 function hasMomentMedia(moment: TripActualMoment): boolean {
   return moment.photos.length > 0 || (moment.videos?.length ?? 0) > 0;
+}
+
+function annotationTagFromSource(source: string): string {
+  const normalized = source.toLowerCase();
+  if (normalized.includes('dad updates')) return 'Dad note';
+  if (normalized.includes('mom updates')) return 'Mom note';
+  return 'Family note';
 }
 
 function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripActualMoment[] {
@@ -391,7 +393,7 @@ export function App() {
     return defaults;
   });
   const activeMapScope = resolveActiveMapScope(activeAppTab, mapScopeByTab);
-  const [mapStyle, setMapStyle] = useState<MapStyle>('road');
+  const mapStyle = 'hybrid';
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -445,9 +447,10 @@ export function App() {
   const selectedDayAnnotations = useMemo<DayAnnotationRow[]>(
     () =>
       selectedActualMoments
-        .filter((moment) => moment.source.toLowerCase().includes('dad updates') && moment.text.trim().length > 0)
+        .filter((moment) => moment.source.toLowerCase().includes('updates') && moment.text.trim().length > 0)
         .map((moment) => ({
           id: moment.id,
+          tag: annotationTagFromSource(moment.source),
           source: moment.source,
           whenLabel: moment.whenLabel,
           text: moment.text,
@@ -862,15 +865,9 @@ export function App() {
     const roadOverlayLayer = roadOverlayLayerRef.current;
     if (!roadBaseLayer || !satelliteLayer || !roadOverlayLayer) return;
 
-    if (mapStyle === 'hybrid') {
-      if (map.hasLayer(roadBaseLayer)) map.removeLayer(roadBaseLayer);
-      if (!map.hasLayer(satelliteLayer)) map.addLayer(satelliteLayer);
-      if (!map.hasLayer(roadOverlayLayer)) map.addLayer(roadOverlayLayer);
-    } else {
-      if (map.hasLayer(satelliteLayer)) map.removeLayer(satelliteLayer);
-      if (map.hasLayer(roadOverlayLayer)) map.removeLayer(roadOverlayLayer);
-      if (!map.hasLayer(roadBaseLayer)) map.addLayer(roadBaseLayer);
-    }
+    if (map.hasLayer(roadBaseLayer)) map.removeLayer(roadBaseLayer);
+    if (!map.hasLayer(satelliteLayer)) map.addLayer(satelliteLayer);
+    if (!map.hasLayer(roadOverlayLayer)) map.addLayer(roadOverlayLayer);
   }, [mapStatus, mapStyle]);
 
   useEffect(() => {
@@ -1339,22 +1336,9 @@ export function App() {
             </button>
           ))}
         </div>
-        <div className="map-style-toggle" role="group" aria-label="Map style">
-          {(['road', 'hybrid'] as MapStyle[]).map((style) => (
-            <button
-              key={style}
-              type="button"
-              className={mapStyle === style ? 'active' : ''}
-              onClick={() => setMapStyle(style)}
-              aria-pressed={mapStyle === style}
-            >
-              {MAP_STYLE_LABEL[style]}
-            </button>
-          ))}
-        </div>
         <p className="map-meta">
           {activeMapScope === 'trip'
-            ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
+            ? 'Route overview across all itinerary days.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
 
@@ -1382,7 +1366,7 @@ export function App() {
           <h3>Keyboard Stop List</h3>
           <p className="hint">
             Use these buttons to move map focus without dragging.{' '}
-            {activeMapScope === 'trip' ? 'Showing first stop per day.' : 'Showing stops for selected day.'}
+            {activeMapScope === 'trip' ? 'Showing first stop per day in Route Overview.' : 'Showing stops for the current day.'}
           </p>
           <ul className="map-stop-list">
             {mapStops.length === 0 ? (
@@ -1504,14 +1488,6 @@ export function App() {
               ) : null}
             </>
           ) : null}
-
-          <button
-            type="button"
-            className="secondary-btn"
-            onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
-          >
-            Map: {MAP_SCOPE_LABEL[activeMapScope]}
-          </button>
 
           <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
             Back to Today
@@ -1709,19 +1685,19 @@ export function App() {
                   </div>
                   <section
                     className={`day-annotations ${selectedDayAnnotations.length === 0 ? 'is-empty' : ''}`}
-                    aria-label="Dad updates"
+                    aria-label="Family updates"
                   >
                     <div className="day-annotations-header">
-                      <h3>Dad Updates</h3>
+                      <h3>Family Updates</h3>
                       <span className="day-annotations-count">{selectedDayAnnotations.length}</span>
                     </div>
-                    <p className="day-annotations-subtitle">Highlighted notes from dad&apos;s family-thread updates.</p>
+                    <p className="day-annotations-subtitle">Highlighted notes from family-thread updates.</p>
                     {selectedDayAnnotations.length > 0 ? (
                       <ul className="day-annotation-list">
                         {selectedDayAnnotations.map((annotation) => (
                           <li key={annotation.id}>
                             <div className="day-annotation-meta">
-                              <span className="day-annotation-tag">Dad note</span>
+                              <span className="day-annotation-tag">{annotation.tag}</span>
                               <span className="pill">{annotation.whenLabel}</span>
                             </div>
                             <p>{annotation.text}</p>
@@ -1730,7 +1706,7 @@ export function App() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="day-annotations-empty">No dad updates logged for {formatDateLabel(selectedDate)}.</p>
+                      <p className="day-annotations-empty">No family updates logged for {formatDateLabel(selectedDate)}.</p>
                     )}
                   </section>
                   <ol className="timeline-list">

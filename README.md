@@ -115,6 +115,7 @@ node -e "crypto.subtle.digest('SHA-256',new TextEncoder().encode(process.argv[1]
 - Unresolved queue: `docs/dad-content-review.md`
 - EXIF allocation report (latest drop): `docs/dad-content-exif-allocation-2026-02-20.md`
 - Inbox template: `content/dad-inbox/template/`
+- Media graveyard + duplicate report: `npm run actuals:graveyard --workspace web` (writes `docs/media-graveyard-report.md`)
 
 ## Favicon
 

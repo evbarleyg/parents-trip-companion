@@ -44,6 +44,20 @@ describe('actual moments seed data', () => {
     }
   });
 
+  it('includes mom thread updates for Feb 25 Maldives day', () => {
+    const moments = getActualMomentsForDate('2026-02-25');
+    const morning = moments.find((moment) => moment.id === 'actual-2026-02-25-mom-speedboat-update');
+    const sunset = moments.find((moment) => moment.id === 'actual-2026-02-25-mom-sunset-snorkel-update');
+
+    expect(morning?.source.toLowerCase()).toContain('mom updates');
+    expect(morning?.text.toLowerCase()).toContain('manta rays');
+    expect(sunset?.source.toLowerCase()).toContain('mom updates');
+    expect(sunset?.text.toLowerCase()).toContain('hawksbill');
+    expect(sunset?.photos.map((photo) => photo.src)).toEqual(
+      expect.arrayContaining(['/actuals/mom-2026-02-25-img-1372.jpeg', '/actuals/mom-2026-02-25-img-1373.jpeg']),
+    );
+  });
+
   it('keeps moment and photo IDs unique across merged datasets', () => {
     const allMoments = getAllSeedActualMoments();
     const momentIds = new Set<string>();

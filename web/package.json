@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "actuals:promote": "node ./scripts/promote-actuals-from-inbox.mjs",
-    "actuals:snippets": "node ./scripts/generate-actuals-snippets.mjs"
+    "actuals:snippets": "node ./scripts/generate-actuals-snippets.mjs",
+    "actuals:graveyard": "node ./scripts/build-media-graveyard-report.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

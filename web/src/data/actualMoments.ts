@@ -2,6 +2,7 @@ import type { TripActualMoment } from '../types';
 import { DAD_ACTUAL_MOMENTS_BY_DATE } from './actualMomentsDad';
 
 const SOURCE = 'B-G-M Fam iMessage export (Susan Barley / Jim Greenfield)';
+const MOM_UPDATE_SOURCE = 'Mom updates (B-G-M Fam thread)';
 
 const FAMILY_ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
   '2026-02-03': [
@@ -73,6 +74,35 @@ const FAMILY_ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
           src: '/actuals/maldives-beach-lunch.png',
           alt: 'Cold drink on a beachside table at Maldives resort',
           caption: 'Resort lunch by the water.',
+        },
+      ],
+    },
+  ],
+  '2026-02-25': [
+    {
+      id: 'actual-2026-02-25-mom-speedboat-update',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Wed, Feb 25 - Morning',
+      text: 'Private speedboat outing to look for manta rays and juvenile whale sharks was overcrowded in the water, no whale sharks appeared, and the boat ran out of gas on the return. Mom also reported getting some sunburn.',
+      photos: [],
+    },
+    {
+      id: 'actual-2026-02-25-mom-sunset-snorkel-update',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Wed, Feb 25 - Sunset',
+      text: 'Sunset followed an incredible snorkel with eagle rays, a hawksbill turtle, anemones with anemonefish, sharks, and dense fish/coral life.',
+      photos: [
+        {
+          id: 'actual-photo-2026-02-25-mom-sunset-1372',
+          src: '/actuals/mom-2026-02-25-img-1372.jpeg',
+          alt: 'Sunset over Maldives overwater villas with the sun near the horizon.',
+          caption: 'Sunset at the overwater villas after the reef snorkel day.',
+        },
+        {
+          id: 'actual-photo-2026-02-25-mom-sunset-1373',
+          src: '/actuals/mom-2026-02-25-img-1373.jpeg',
+          alt: 'Maldives sunset framed by overwater villas and flower planters in the lagoon.',
+          caption: 'Second sunset angle from the same Maldives evening.',
         },
       ],
     },
