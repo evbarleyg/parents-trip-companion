@@ -112,11 +112,62 @@ const DAD_PHOTO_META: Record<string, { capturedAt: string; originalName: string 
   'dad-2026-02-18-img-1253.jpeg': { capturedAt: '2026:02:18 18:39:20', originalName: 'IMG_1253.jpeg' },
   'dad-2026-02-19-img-0686.jpeg': { capturedAt: '2026:02:19 11:36:41', originalName: 'IMG_0686.jpeg' },
   'dad-2026-02-19-img-1304.jpeg': { capturedAt: '2026:02:19 16:10:40', originalName: 'IMG_1304.jpeg' },
+  'dad-2026-02-14-muscat-grand-mosque-tile-01.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_44---660691e2-ddac-4a8f-9050-e59fd2b67484.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-dome-02.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_45---3b1c98b6-96a6-4302-8d61-78c72940985a.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-dome-03.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_46---abddaa69-a99c-448f-b4de-b509223c6a28.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-selfie-04.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_47---01232145-ba7d-43b0-85fe-122d96de9630.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-minaret-05.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_48---6f264e53-4106-464a-8828-f3ee2abc6b14.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-courtyard-06.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_49---fbf9027a-80db-470e-95eb-b74721073007.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-archway-07.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_50---4b5b90a6-e523-42ee-81ea-0bda597e95e1.jpg',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-mihrab-08.jpg': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_51---70b1ef40-9e4d-4583-95b1-f61d657ddbbc.jpg',
+  },
 };
 
-const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string; poster?: string }> = {};
+const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string; poster?: string }> = {
+  'dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_41---4dcb984a-42d2-4eeb-b60c-98fcca52c70f.mp4',
+  },
+  'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4': {
+    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    originalName: 'file_42---1ab8b829-74ae-4c5a-80b7-da2de19b8e35.mp4',
+  },
+};
 
-const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {};
+const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {
+  '2026-02-14': [
+    'dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4',
+    'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4',
+    'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4',
+  ],
+};
 
 const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
   '2026-02-05': [
@@ -147,7 +198,17 @@ const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
     'dad-2026-02-13-img-1156.jpeg',
     'dad-2026-02-13-img-1169.jpeg',
   ],
-  '2026-02-14': ['dad-2026-02-14-img-0644.jpeg'],
+  '2026-02-14': [
+    'dad-2026-02-14-img-0644.jpeg',
+    'dad-2026-02-14-muscat-grand-mosque-tile-01.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-dome-02.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-dome-03.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-selfie-04.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-minaret-05.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-courtyard-06.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-archway-07.jpg',
+    'dad-2026-02-14-muscat-grand-mosque-mihrab-08.jpg',
+  ],
   '2026-02-15': ['dad-2026-02-15-img-1190.jpeg', 'dad-2026-02-15-img-1197.jpeg'],
   '2026-02-18': [
     'dad-2026-02-18-img-0676.jpeg',
