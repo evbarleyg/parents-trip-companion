@@ -39,16 +39,7 @@ function detectMediaKind(row) {
   return VIDEO_EXTENSIONS.has(extensionFromFilename(filename)) ? 'video' : 'photo';
 }
 
-async function ensurePlanExists() {
-  try {
-    await fs.access(PLAN_PATH);
-  } catch {
-    throw new Error(`Missing promotion manifest: ${PLAN_PATH}`);
-  }
-}
-
 async function run() {
-  await ensurePlanExists();
   const raw = await fs.readFile(PLAN_PATH, 'utf8');
   const plan = JSON.parse(raw);
   const promotions = Array.isArray(plan.promotions) ? plan.promotions : [];
@@ -82,44 +73,49 @@ async function run() {
       sections.push(`### momentId: ${momentId}`);
       sections.push('');
       sections.push('```ts');
-
-      const photos = momentRows.filter((row) => detectMediaKind(row) === 'photo');
-      const videos = momentRows.filter((row) => detectMediaKind(row) === 'video');
-
       sections.push('photos: [');
-      for (const row of photos) {
-        const mediaId = row.photoId || row.mediaId || row.videoId;
+
+      for (const row of momentRows) {
+        const mediaId = row.photoId || row.mediaId;
+        const mediaKind = detectMediaKind(row);
         sections.push('  {');
         sections.push(`    id: '${esc(mediaId)}',`);
         sections.push(`    src: '/actuals/${esc(row.targetFilename)}',`);
+        if (mediaKind === 'video') {
+          sections.push(`    kind: 'video',`);
+        }
+        if (typeof row.posterSrc === 'string' && row.posterSrc.trim().length > 0) {
+          sections.push(`    posterSrc: '${esc(row.posterSrc)}',`);
+        }
+        if (typeof row.mimeType === 'string' && row.mimeType.trim().length > 0) {
+          sections.push(`    mimeType: '${esc(row.mimeType)}',`);
+        }
+        if (typeof row.controls === 'boolean') {
+          sections.push(`    controls: ${row.controls},`);
+        }
+        if (typeof row.autoplay === 'boolean') {
+          sections.push(`    autoplay: ${row.autoplay},`);
+        }
+        if (typeof row.loop === 'boolean') {
+          sections.push(`    loop: ${row.loop},`);
+        }
+        if (typeof row.muted === 'boolean') {
+          sections.push(`    muted: ${row.muted},`);
+        }
+        if (typeof row.preload === 'string' && row.preload.trim().length > 0) {
+          sections.push(`    preload: '${esc(row.preload)}',`);
+        }
         sections.push(`    alt: '${esc(row.alt)}',`);
         sections.push(`    caption: '${esc(row.caption)}',`);
         sections.push('  },');
       }
+
       sections.push('],');
-
-      if (videos.length > 0) {
-        sections.push('');
-        sections.push('videos: [');
-        for (const row of videos) {
-          const mediaId = row.videoId || row.mediaId || row.photoId;
-          sections.push('  {');
-          sections.push(`    id: '${esc(mediaId)}',`);
-          sections.push(`    src: '/actuals/${esc(row.targetFilename)}',`);
-          sections.push(`    caption: '${esc(row.caption)}',`);
-          if (typeof row.poster === 'string' && row.poster.trim().length > 0) {
-            sections.push(`    poster: '${esc(row.poster)}',`);
-          }
-          sections.push('  },');
-        }
-        sections.push('],');
-      }
-
       sections.push('```');
       sections.push('');
       sections.push('Attribution notes:');
       for (const row of momentRows) {
-        sections.push(`- ${row.photoId || row.videoId || row.mediaId}: ${row.attribution}`);
+        sections.push(`- ${row.photoId || row.mediaId}: ${row.attribution}`);
       }
       sections.push('');
     }

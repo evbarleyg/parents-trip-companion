@@ -44,6 +44,13 @@ describe('actual moments seed data', () => {
     }
   });
 
+  it('includes mom updates on the Oman return-to-Muscat days', () => {
+    for (const date of ['2026-02-20', '2026-02-21']) {
+      const moments = getActualMomentsForDate(date);
+      expect(moments.some((moment) => moment.source.toLowerCase().includes('mom updates'))).toBe(true);
+    }
+  });
+
   it('keeps moment and photo IDs unique across merged datasets', () => {
     const allMoments = getAllSeedActualMoments();
     const momentIds = new Set<string>();

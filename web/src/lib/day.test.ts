@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { TripDay } from '../types';
-import { dayHasPhotos, dayOptionLabel, dayPhotoCount } from './day';
+import { dayHasMedia, dayHasPhotos, dayMediaCount, dayOptionLabel, dayPhotoCount } from './day';
 
 function makeDay(overrides: Partial<TripDay> = {}): TripDay {
   return {
@@ -40,25 +40,38 @@ describe('day helper functions', () => {
       ],
     });
 
-    const withVideos = makeDay({
+    expect(dayHasPhotos(withPhotos)).toBe(true);
+    expect(dayHasPhotos(withoutPhotos)).toBe(false);
+    expect(dayPhotoCount(withPhotos)).toBe(1);
+    expect(dayPhotoCount(withoutPhotos)).toBe(0);
+    expect(dayHasMedia(withPhotos)).toBe(true);
+    expect(dayMediaCount(withPhotos)).toBe(1);
+  });
+
+  test('counts video-only moments as media days', () => {
+    const withVideo = makeDay({
       actualMoments: [
         {
-          id: 'm4',
-          source: 'iMessage',
+          id: 'm-video',
+          source: 'Telegram',
           whenLabel: 'Night',
-          text: 'Walkthrough clip',
-          photos: [],
-          videos: [{ id: 'v1', src: '/clip.mp4', caption: 'Night market clip' }],
+          text: 'Video clip',
+          photos: [
+            {
+              id: 'v1',
+              kind: 'video',
+              src: '/actuals/night-clip.mp4',
+              alt: 'Night market walkthrough video',
+              caption: 'Walking clip from the market',
+            },
+          ],
         },
       ],
     });
 
-    expect(dayHasPhotos(withPhotos)).toBe(true);
-    expect(dayHasPhotos(withoutPhotos)).toBe(false);
-    expect(dayHasPhotos(withVideos)).toBe(true);
-    expect(dayPhotoCount(withPhotos)).toBe(1);
-    expect(dayPhotoCount(withoutPhotos)).toBe(0);
-    expect(dayPhotoCount(withVideos)).toBe(1);
+    expect(dayHasPhotos(withVideo)).toBe(true);
+    expect(dayPhotoCount(withVideo)).toBe(1);
+    expect(dayOptionLabel(withVideo, '2026-02-12')).toContain('MEDIA');
   });
 
   test('builds option labels with TODAY and MEDIA markers', () => {

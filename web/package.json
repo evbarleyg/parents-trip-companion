@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "actuals:promote": "node ./scripts/promote-actuals-from-inbox.mjs",
-    "actuals:snippets": "node ./scripts/generate-actuals-snippets.mjs"
+    "actuals:snippets": "node ./scripts/generate-actuals-snippets.mjs",
+    "actuals:dedupe": "node ./scripts/dedupe-actuals-library.mjs",
+    "actuals:audit-dates": "node ./scripts/audit-photo-date-alignment.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

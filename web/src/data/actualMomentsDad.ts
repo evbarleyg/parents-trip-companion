@@ -1,12 +1,36 @@
 import type { TripActualMoment } from '../types';
 
 const DAD_TEXT_SOURCE = 'Dad updates (B-G-M Fam thread)';
-const DAD_PHOTO_SOURCE = 'Dad media dump (EXIF date + itinerary geocode fallback)';
+const MOM_TEXT_SOURCE = 'Mom updates (B-G-M Fam thread)';
+const DAD_PHOTO_SOURCE = 'Dad photo dump (EXIF date + itinerary geocode fallback)';
+const MOM_PHOTO_SOURCE = 'Mom photo dump (EXIF date + itinerary geocode fallback)';
 
 interface DayGeo {
   region: string;
   lat: number;
   lng: number;
+}
+
+interface FamilyTextUpdate {
+  id: string;
+  whenLabel: string;
+  text: string;
+}
+
+interface FamilyPhotoMeta {
+  capturedAt: string;
+  originalName: string;
+}
+
+interface BuildPhotoMomentOptions {
+  source: string;
+  whenLabel: string;
+  momentIdPrefix: string;
+  photoIdPrefix: string;
+  altLead: string;
+  dateMethodText: string;
+  captionLead: string;
+  captionMetaLabel: string;
 }
 
 // Dad's numbered text notes are pinned to itinerary dates.
@@ -32,10 +56,11 @@ const GEO_BY_DATE: Record<string, DayGeo> = {
   '2026-02-16': { region: 'Oman - Wahiba Sands', lat: 22.4802, lng: 58.7374 },
   '2026-02-18': { region: 'Oman - Jebel Akhdar', lat: 23.0721, lng: 57.6675 },
   '2026-02-19': { region: 'Oman - Jebel Shams', lat: 23.2376, lng: 57.2635 },
+  '2026-02-20': { region: 'Oman - Nizwa / Muscat', lat: 22.9333, lng: 57.5333 },
   '2026-02-21': { region: 'Oman - Muscat', lat: 23.588, lng: 58.3829 },
 };
 
-const DAD_TEXT_UPDATES: Record<string, Array<{ id: string; whenLabel: string; text: string }>> = {
+const DAD_TEXT_UPDATES: Record<string, FamilyTextUpdate[]> = {
   '2026-02-07': [
     {
       id: 'dad-text-2026-02-07-number-1',
@@ -80,7 +105,24 @@ const DAD_TEXT_UPDATES: Record<string, Array<{ id: string; whenLabel: string; te
   ],
 };
 
-const DAD_PHOTO_META: Record<string, { capturedAt: string; originalName: string }> = {
+const MOM_TEXT_UPDATES: Record<string, FamilyTextUpdate[]> = {
+  '2026-02-20': [
+    {
+      id: 'mom-text-2026-02-20-nizwa-ramadan',
+      whenLabel: 'Fri, Feb 20 - Nizwa and Ramadan observations - Mom update',
+      text: 'We went to Nizwa, a large area on a beautiful 1600 ft plateau filled with oases for dates and fruit, which are watered by these complex above and underground canals/aqueducts called falajs. Lots of old Omani history as tribes fought over these valuable areas, and the Persians, Ottomans and Portuguese tried to conquer them. None succeeded, so the Oman area was never colonized by outsiders, including Europeans. So, lots of fortresses. Today we went to Nizwa Fort and castle. Castle is from the 9th C and Fort (round part) 17th C. Ramadan started Thursday. We have had 2 days and things are different. Most restaurants are closed at lunch, except hotels, as most people are fasting: no water or food from sun up to sun down. We are asked to not eat or drink in front of those who may be fasting, including our drivers for the past 2 days. Breaking the fast is called iftar, and is a major food celebration with rituals. At sundown, break the fast with yogurt, lemon and dates. Then pray. Then eat. At the Chedi Hotel in Muscat, there is a lavish buffet with beautiful lights. In the mountain hotel, curtains are closed in the restaurant until after sundown so those who fast do not need to watch us eat.',
+    },
+  ],
+  '2026-02-21': [
+    {
+      id: 'mom-text-2026-02-21-muscat-mosque',
+      whenLabel: 'Sat, Feb 21 - Back in Muscat - Mom update',
+      text: 'Today we are back in Muscat from the spectacular mountains of Oman. Some fun pics: men and women bathroom symbols. Today we visited the Sultan Qaboos Grand Mosque in Muscat. It is the most beautiful new building I have ever seen. It is enormous and was built in 4 years. It is a blend of Islamic styles and shows what can be done with ambition and unlimited budget.',
+    },
+  ],
+};
+
+const DAD_PHOTO_META: Record<string, FamilyPhotoMeta> = {
   'dad-2026-02-05-79198991565-244df404-a1ce-4c62-8ffa-605a7db358d0.jpeg': {
     capturedAt: '2026:02:05 17:11:55',
     originalName: '79198991565__244DF404-A1CE-4C62-8FFA-605A7DB358D0.jpeg',
@@ -113,61 +155,24 @@ const DAD_PHOTO_META: Record<string, { capturedAt: string; originalName: string 
   'dad-2026-02-18-img-1253.jpeg': { capturedAt: '2026:02:18 18:39:20', originalName: 'IMG_1253.jpeg' },
   'dad-2026-02-19-img-0686.jpeg': { capturedAt: '2026:02:19 11:36:41', originalName: 'IMG_0686.jpeg' },
   'dad-2026-02-19-img-1304.jpeg': { capturedAt: '2026:02:19 16:10:40', originalName: 'IMG_1304.jpeg' },
-  'dad-2026-02-14-muscat-grand-mosque-tile-01.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_44---660691e2-ddac-4a8f-9050-e59fd2b67484.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-dome-02.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_45---3b1c98b6-96a6-4302-8d61-78c72940985a.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-dome-03.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_46---abddaa69-a99c-448f-b4de-b509223c6a28.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-selfie-04.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_47---01232145-ba7d-43b0-85fe-122d96de9630.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-minaret-05.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_48---6f264e53-4106-464a-8828-f3ee2abc6b14.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-courtyard-06.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_49---fbf9027a-80db-470e-95eb-b74721073007.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-archway-07.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_50---4b5b90a6-e523-42ee-81ea-0bda597e95e1.jpg',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-mihrab-08.jpg': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_51---70b1ef40-9e4d-4583-95b1-f61d657ddbbc.jpg',
-  },
 };
 
-const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string; poster?: string }> = {
-  'dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4': {
-    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
-    originalName: 'file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4': {
-    capturedAt: '2026-02-24 (Telegram import, user-confirmed Maldives)',
-    originalName: 'file_41---4dcb984a-42d2-4eeb-b60c-98fcca52c70f.mp4',
-  },
-  'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4': {
-    capturedAt: '2026-02-24 (Telegram import, user-confirmed Maldives)',
-    originalName: 'file_42---1ab8b829-74ae-4c5a-80b7-da2de19b8e35.mp4',
-  },
-};
-
-const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {
-  '2026-02-21': ['dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4'],
-  '2026-02-24': [
-    'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4',
-    'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4',
-  ],
+const MOM_PHOTO_META: Record<string, FamilyPhotoMeta> = {
+  'mom-2026-02-20-img-1307.jpeg': { capturedAt: '2026:02:20 09:55:51', originalName: 'IMG_1307.jpeg' },
+  'mom-2026-02-20-img-1308.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1308.jpeg' },
+  'mom-2026-02-20-img-1309.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1309.jpeg' },
+  'mom-2026-02-20-img-1312.jpeg': { capturedAt: '2026:02:20 09:46:53', originalName: 'IMG_1312.jpeg' },
+  'mom-2026-02-20-img-1313.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1313.jpeg' },
+  'mom-2026-02-20-img-1314.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1314.jpeg' },
+  'mom-2026-02-20-img-1316.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1316.jpeg' },
+  'mom-2026-02-20-img-1317.jpeg': { capturedAt: '2026:02:20 09:46:53', originalName: 'IMG_1317.jpeg' },
+  'mom-2026-02-20-img-1318.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1318.jpeg' },
+  'mom-2026-02-20-img-1319.jpeg': { capturedAt: '2026:02:20 09:46:54', originalName: 'IMG_1319.jpeg' },
+  'mom-2026-02-21-img-1323.jpeg': { capturedAt: '2026:02:21 09:35:09', originalName: 'IMG_1323.jpeg' },
+  'mom-2026-02-21-img-1325.jpeg': { capturedAt: '2026:02:21 09:35:08', originalName: 'IMG_1325.jpeg' },
+  'mom-2026-02-21-img-1327.jpeg': { capturedAt: '2026:02:21 09:35:08', originalName: 'IMG_1327.jpeg' },
+  'mom-2026-02-21-img-1328.jpeg': { capturedAt: '2026:02:21 09:35:08', originalName: 'IMG_1328.jpeg' },
+  'mom-2026-02-21-img-1329.jpeg': { capturedAt: '2026:02:21 09:35:08', originalName: 'IMG_1329.jpeg' },
 };
 
 const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
@@ -201,16 +206,6 @@ const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
   ],
   '2026-02-14': ['dad-2026-02-14-img-0644.jpeg'],
   '2026-02-15': ['dad-2026-02-15-img-1190.jpeg', 'dad-2026-02-15-img-1197.jpeg'],
-  '2026-02-21': [
-    'dad-2026-02-14-muscat-grand-mosque-tile-01.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-dome-02.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-dome-03.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-selfie-04.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-minaret-05.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-courtyard-06.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-archway-07.jpg',
-    'dad-2026-02-14-muscat-grand-mosque-mihrab-08.jpg',
-  ],
   '2026-02-18': [
     'dad-2026-02-18-img-0676.jpeg',
     'dad-2026-02-18-img-0679.jpeg',
@@ -219,70 +214,130 @@ const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
   '2026-02-19': ['dad-2026-02-19-img-0686.jpeg', 'dad-2026-02-19-img-1304.jpeg'],
 };
 
+const MOM_PHOTOS_BY_DATE: Record<string, string[]> = {
+  '2026-02-20': [
+    'mom-2026-02-20-img-1307.jpeg',
+    'mom-2026-02-20-img-1308.jpeg',
+    'mom-2026-02-20-img-1309.jpeg',
+    'mom-2026-02-20-img-1312.jpeg',
+    'mom-2026-02-20-img-1313.jpeg',
+    'mom-2026-02-20-img-1314.jpeg',
+    'mom-2026-02-20-img-1316.jpeg',
+    'mom-2026-02-20-img-1317.jpeg',
+    'mom-2026-02-20-img-1318.jpeg',
+    'mom-2026-02-20-img-1319.jpeg',
+  ],
+  '2026-02-21': [
+    'mom-2026-02-21-img-1323.jpeg',
+    'mom-2026-02-21-img-1325.jpeg',
+    'mom-2026-02-21-img-1327.jpeg',
+    'mom-2026-02-21-img-1328.jpeg',
+    'mom-2026-02-21-img-1329.jpeg',
+  ],
+};
+
 function formatGeo(geo: DayGeo): string {
   return `${geo.region} (${geo.lat.toFixed(4)}, ${geo.lng.toFixed(4)})`;
 }
 
-function buildTextMoments(date: string): TripActualMoment[] {
-  const updates = DAD_TEXT_UPDATES[date] || [];
-  return updates.map((update) => ({
+function buildSourceTextMoments(date: string, source: string, updatesByDate: Record<string, FamilyTextUpdate[]>): TripActualMoment[] {
+  return (updatesByDate[date] || []).map((update) => ({
     id: update.id,
-    source: DAD_TEXT_SOURCE,
+    source,
     whenLabel: update.whenLabel,
     text: update.text,
     photos: [],
   }));
 }
 
-function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
+function buildPhotoMoment(
+  date: string,
+  fileNames: string[],
+  metaByFile: Record<string, FamilyPhotoMeta>,
+  options: BuildPhotoMomentOptions,
+): TripActualMoment {
   const geo = GEO_BY_DATE[date];
-  const videos = DAD_VIDEOS_BY_DATE[date] || [];
+
   return {
-    id: `dad-media-${date}`,
-    source: DAD_PHOTO_SOURCE,
-    whenLabel: `${date} - EXIF media set`,
+    id: `${options.momentIdPrefix}-${date}`,
+    source: options.source,
+    whenLabel: options.whenLabel,
     text: geo
-      ? `Media were dated from EXIF creation metadata. GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
-      : 'Media were dated from EXIF creation metadata. GPS tags were missing in the shared export.',
+      ? `${options.dateMethodText} GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
+      : options.dateMethodText,
     photos: fileNames.map((fileName, index) => {
-      const meta = DAD_PHOTO_META[fileName];
+      const meta = metaByFile[fileName] || { capturedAt: 'unknown', originalName: fileName };
       const geoLabel = geo ? ` in ${geo.region}` : '';
       const geoCaption = geo ? ` | inferred map anchor: ${formatGeo(geo)}` : '';
+
       return {
-        id: `dad-photo-${date}-${index + 1}`,
+        id: `${options.photoIdPrefix}-${date}-${index + 1}`,
         src: `/actuals/${fileName}`,
-        alt: `Dad travel photo ${meta.originalName}${geoLabel} on ${date}`,
-        caption: `${meta.originalName} | EXIF ${meta.capturedAt}${geoCaption}`,
-      };
-    }),
-    videos: videos.map((fileName, index) => {
-      const meta = DAD_VIDEO_META[fileName] || { originalName: fileName };
-      const geoCaption = geo ? ` | inferred map anchor: ${formatGeo(geo)}` : '';
-      const captured = meta.capturedAt ? ` | EXIF ${meta.capturedAt}` : '';
-      return {
-        id: `dad-video-${date}-${index + 1}`,
-        src: `/actuals/${fileName}`,
-        caption: `${meta.originalName}${captured}${geoCaption}`,
-        poster: meta.poster,
+        alt: `${options.altLead} ${meta.originalName}${geoLabel} on ${date}`,
+        caption: `${meta.originalName} | ${options.captionMetaLabel} ${meta.capturedAt}${options.captionLead}${geoCaption}`,
       };
     }),
   };
 }
 
+function buildTextMoments(date: string): TripActualMoment[] {
+  return [
+    ...buildSourceTextMoments(date, DAD_TEXT_SOURCE, DAD_TEXT_UPDATES),
+    ...buildSourceTextMoments(date, MOM_TEXT_SOURCE, MOM_TEXT_UPDATES),
+  ];
+}
+
+function buildPhotoMoments(date: string): TripActualMoment[] {
+  const dadPhotos = DAD_PHOTOS_BY_DATE[date] || [];
+  const momPhotos = MOM_PHOTOS_BY_DATE[date] || [];
+  const moments: TripActualMoment[] = [];
+
+  if (dadPhotos.length > 0) {
+    moments.push(
+      buildPhotoMoment(date, dadPhotos, DAD_PHOTO_META, {
+        source: DAD_PHOTO_SOURCE,
+        whenLabel: `${date} - EXIF photo set`,
+        momentIdPrefix: 'dad-photos',
+        photoIdPrefix: 'dad-photo',
+        altLead: 'Dad travel photo',
+        dateMethodText:
+          'Photos were dated from EXIF creation metadata.',
+        captionLead: '',
+        captionMetaLabel: 'EXIF',
+      }),
+    );
+  }
+
+  if (momPhotos.length > 0) {
+    moments.push(
+      buildPhotoMoment(date, momPhotos, MOM_PHOTO_META, {
+        source: MOM_PHOTO_SOURCE,
+        whenLabel: `${date} - EXIF photo set`,
+        momentIdPrefix: 'mom-photos',
+        photoIdPrefix: 'mom-photo',
+        altLead: 'Mom travel photo',
+        dateMethodText:
+          'Photos were dated from EXIF creation metadata.',
+        captionLead: '',
+        captionMetaLabel: 'EXIF',
+      }),
+    );
+  }
+
+  return moments;
+}
+
 function buildMomentsByDate(): Record<string, TripActualMoment[]> {
   const dates = new Set<string>([
     ...Object.keys(DAD_TEXT_UPDATES),
+    ...Object.keys(MOM_TEXT_UPDATES),
     ...Object.keys(DAD_PHOTOS_BY_DATE),
-    ...Object.keys(DAD_VIDEOS_BY_DATE),
+    ...Object.keys(MOM_PHOTOS_BY_DATE),
   ]);
   const out: Record<string, TripActualMoment[]> = {};
 
   for (const date of [...dates].sort()) {
-    const textMoments = buildTextMoments(date);
-    const photos = DAD_PHOTOS_BY_DATE[date] || [];
-    const videos = DAD_VIDEOS_BY_DATE[date] || [];
-    const mediaMoment = photos.length > 0 || videos.length > 0 ? [buildPhotoMoment(date, photos)] : [];
-    out[date] = textMoments.concat(mediaMoment);
+    out[date] = [...buildTextMoments(date), ...buildPhotoMoments(date)];
   }
 
   return out;

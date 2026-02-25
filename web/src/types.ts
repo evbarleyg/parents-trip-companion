@@ -1,4 +1,5 @@
 export type RecCategory = 'sights' | 'food' | 'coffee' | 'rest';
+export type TripActualMediaKind = 'photo' | 'video';
 
 export type ViewMode = 'summary' | 'detail';
 export type AppViewTab = 'trip_overview' | 'day_detail' | 'photo_gallery';
@@ -23,6 +24,14 @@ export interface TripActualPhoto {
   src: string;
   alt: string;
   caption: string;
+  kind?: TripActualMediaKind;
+  posterSrc?: string;
+  mimeType?: string;
+  autoplay?: boolean;
+  controls?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  preload?: 'none' | 'metadata' | 'auto';
 }
 
 export interface TripActualVideo {

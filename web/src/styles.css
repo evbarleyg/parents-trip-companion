@@ -113,6 +113,31 @@ body,
   align-items: flex-start;
 }
 
+.toolbar-date-row {
+  min-width: min(320px, 100%);
+  margin: 0;
+}
+
+.toolbar-date-row label {
+  font-size: 0.78rem;
+  color: #365369;
+  font-weight: 700;
+}
+
+.toolbar-date-row select {
+  min-width: min(360px, 100%);
+}
+
+.toolbar-mode-toggle,
+.toolbar-day-mode-toggle {
+  margin-bottom: 0;
+}
+
+.toolbar-mode-toggle > button,
+.toolbar-day-mode-toggle > button {
+  min-width: 136px;
+}
+
 .toolbar-pill-row > * {
   flex: 0 0 auto;
 }
@@ -340,7 +365,8 @@ body,
   box-shadow: 0 0 0 1px rgba(179, 92, 31, 0.35);
 }
 
-.top-photo-item img {
+.top-photo-item img,
+.top-photo-item video {
   width: 100%;
   height: 150px;
   object-fit: cover;
@@ -691,6 +717,17 @@ a:focus-visible {
   line-height: 1.35;
 }
 
+.day-annotation-list blockquote {
+  margin: 0;
+  border-left: 4px solid #8f4c1d;
+  border-radius: 6px;
+  background: #fff7ec;
+  color: #243a4a;
+  padding: 6px 10px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
 .day-annotations-empty {
   margin: 0;
   border: 1px dashed #aebfcd;
@@ -928,6 +965,19 @@ a:focus-visible {
   color: var(--muted);
 }
 
+.full-trip-day-row {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.full-trip-day-summary {
+  margin: 0;
+  color: #243a4a;
+  font-size: 0.93rem;
+  font-weight: 600;
+}
+
 .map-shell {
   overflow: hidden;
 }
@@ -1134,8 +1184,8 @@ a:focus-visible {
 
   .toolbar-pill-row {
     gap: 6px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    overflow-x: visible;
     padding-bottom: 2px;
   }
 
@@ -1160,7 +1210,8 @@ a:focus-visible {
     gap: 8px;
   }
 
-  .top-photo-item img {
+  .top-photo-item img,
+  .top-photo-item video {
     height: 128px;
   }
 

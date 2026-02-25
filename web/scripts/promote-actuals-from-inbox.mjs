@@ -45,66 +45,10 @@ function toManifestContent(filenames) {
   const imageExtensions = [...IMAGE_EXTENSIONS].map((extension) => `'${extension}'`).join(', ');
   const videoExtensions = [...VIDEO_EXTENSIONS].map((extension) => `'${extension}'`).join(', ');
 
-  return `const IMAGE_EXTENSIONS = new Set<string>([${imageExtensions}]);
-const VIDEO_EXTENSIONS = new Set<string>([${videoExtensions}]);
-
-function normalizeSrc(src: string): string {
-  return src.trim().toLowerCase().split('?')[0].split('#')[0];
-}
-
-function extensionFromFilename(filename: string): string {
-  const dotIndex = filename.lastIndexOf('.');
-  if (dotIndex < 0) return '';
-  return filename.slice(dotIndex).toLowerCase();
-}
-
-function srcToFilename(src: string): string {
-  const normalized = normalizeSrc(src);
-  if (!normalized.startsWith('/actuals/')) return '';
-  return normalized.slice('/actuals/'.length);
-}
-
-export const VERIFIED_ACTUAL_MEDIA_FILENAMES = [
-${rows}
-] as const;
-
-export const VERIFIED_ACTUAL_MEDIA_SRCS = VERIFIED_ACTUAL_MEDIA_FILENAMES.map(
-  (filename) => \`/actuals/\${filename}\`,
-);
-
-const VERIFIED_ACTUAL_MEDIA_SRC_SET = new Set<string>(VERIFIED_ACTUAL_MEDIA_SRCS.map((src) => src.toLowerCase()));
-
-export function isVerifiedActualMediaSrc(src: string): boolean {
-  return VERIFIED_ACTUAL_MEDIA_SRC_SET.has(normalizeSrc(src));
-}
-
-export const VERIFIED_ACTUAL_PHOTO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>
-  IMAGE_EXTENSIONS.has(extensionFromFilename(filename)),
-);
-export const VERIFIED_ACTUAL_PHOTO_SRCS = VERIFIED_ACTUAL_PHOTO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);
-
-export const VERIFIED_ACTUAL_VIDEO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>
-  VIDEO_EXTENSIONS.has(extensionFromFilename(filename)),
-);
-export const VERIFIED_ACTUAL_VIDEO_SRCS = VERIFIED_ACTUAL_VIDEO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);
-
-export function isVerifiedActualPhotoSrc(src: string): boolean {
-  const filename = srcToFilename(src);
-  return IMAGE_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);
-}
-
-export function isVerifiedActualVideoSrc(src: string): boolean {
-  const filename = srcToFilename(src);
-  return VIDEO_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);
-}
-`;
+  return `const IMAGE_EXTENSIONS = new Set<string>([${imageExtensions}]);\nconst VIDEO_EXTENSIONS = new Set<string>([${videoExtensions}]);\n\nfunction normalizeSrc(src: string): string {\n  return src.trim().toLowerCase().split('?')[0].split('#')[0];\n}\n\nfunction extensionFromFilename(filename: string): string {\n  const dotIndex = filename.lastIndexOf('.');\n  if (dotIndex < 0) return '';\n  return filename.slice(dotIndex).toLowerCase();\n}\n\nfunction srcToFilename(src: string): string {\n  const normalized = normalizeSrc(src);\n  if (!normalized.startsWith('/actuals/')) return '';\n  return normalized.slice('/actuals/'.length);\n}\n\nexport const VERIFIED_ACTUAL_MEDIA_FILENAMES = [\n${rows}\n] as const;\n\nexport const VERIFIED_ACTUAL_MEDIA_SRCS = VERIFIED_ACTUAL_MEDIA_FILENAMES.map(\n  (filename) => \`/actuals/\${filename}\`,\n);\n\nconst VERIFIED_ACTUAL_MEDIA_SRC_SET = new Set<string>(VERIFIED_ACTUAL_MEDIA_SRCS.map((src) => src.toLowerCase()));\n\nexport function isVerifiedActualMediaSrc(src: string): boolean {\n  return VERIFIED_ACTUAL_MEDIA_SRC_SET.has(normalizeSrc(src));\n}\n\nexport const VERIFIED_ACTUAL_PHOTO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>\n  IMAGE_EXTENSIONS.has(extensionFromFilename(filename)),\n);\nexport const VERIFIED_ACTUAL_PHOTO_SRCS = VERIFIED_ACTUAL_PHOTO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);\n\nexport const VERIFIED_ACTUAL_VIDEO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>\n  VIDEO_EXTENSIONS.has(extensionFromFilename(filename)),\n);\nexport const VERIFIED_ACTUAL_VIDEO_SRCS = VERIFIED_ACTUAL_VIDEO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);\n\nexport function isVerifiedActualPhotoSrc(src: string): boolean {\n  const filename = srcToFilename(src);\n  return IMAGE_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);\n}\n\nexport function isVerifiedActualVideoSrc(src: string): boolean {\n  const filename = srcToFilename(src);\n  return VIDEO_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);\n}\n`;
 }
 
 async function run() {
-  if (!(await fileExists(PLAN_PATH))) {
-    fail(`Missing promotion manifest: ${PLAN_PATH}`);
-  }
-
   const planRaw = await fs.readFile(PLAN_PATH, 'utf8');
   const plan = JSON.parse(planRaw);
   const promotions = Array.isArray(plan.promotions) ? plan.promotions : [];
@@ -116,14 +60,10 @@ async function run() {
     assertSafeFilename(promotion.inboxFilename, `${context}.inboxFilename`);
     assertSafeFilename(promotion.targetFilename, `${context}.targetFilename`);
 
-    for (const field of ['date', 'momentId', 'alt', 'caption', 'attribution']) {
+    for (const field of ['photoId', 'date', 'momentId', 'alt', 'caption', 'attribution']) {
       if (typeof promotion[field] !== 'string' || promotion[field].trim().length < 3) {
         fail(`${context}.${field} is required`);
       }
-    }
-    const mediaId = promotion.photoId || promotion.videoId || promotion.mediaId;
-    if (typeof mediaId !== 'string' || mediaId.trim().length < 3) {
-      fail(`${context}.photoId|videoId|mediaId is required`);
     }
 
     const sourcePath = path.join(INBOX_DIR, promotion.inboxFilename);

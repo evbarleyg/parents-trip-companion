@@ -6,6 +6,7 @@ import {
   unlockPasscode,
 } from './lib/api';
 import { resolvePublicAssetUrl } from './lib/asset-url';
+import { inferVideoMimeType, isVideoMedia } from './lib/media';
 import { buildSeedTripPlan, seedTripPlan } from './data/seedTrip';
 import { formatDateLabel, slugify } from './lib/format';
 import { getTodayInTripRange } from './lib/date';
@@ -27,17 +28,13 @@ import {
   saveSourceDocument,
   saveTripPlanState,
 } from './lib/storage';
-import { getCurrentAndNext } from './lib/time';
 import {
   getDefaultMapScopes,
-  MAP_SCOPE_BY_TAB,
   type MapScopeByTab,
   type MapScope,
   resolveMapScopeForTab,
 } from './lib/view-state';
 import {
-  resolveActiveMapScope,
-  transitionMapScopeFromControl,
   transitionToDate,
   transitionToDayDetails,
   transitionToTab,
@@ -48,7 +45,6 @@ import type {
   CapabilitiesResponse,
   TripActualMoment,
   TripActualPhoto,
-  TripActualVideo,
   MapStatus,
   MobilePanel,
   SourceDocument,
@@ -64,12 +60,6 @@ import type {
 const GEO_REFRESH_MS = 5 * 60 * 1000;
 const MOBILE_BREAKPOINT = 980;
 
-const APP_TAB_LABEL: Record<AppViewTab, string> = {
-  trip_overview: 'Full Trip',
-  day_detail: 'Day Details',
-  photo_gallery: 'Photo Gallery',
-};
-
 const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
   map: 'Map',
   plan: 'Plan',
@@ -77,16 +67,6 @@ const MOBILE_PANEL_LABEL: Record<MobilePanel, string> = {
 
 type LeafletModule = typeof import('leaflet');
 type MapStyle = 'road' | 'hybrid';
-
-const MAP_SCOPE_LABEL: Record<MapScope, string> = {
-  day: 'Selected Day',
-  trip: 'Full Trip',
-};
-
-const MAP_STYLE_LABEL: Record<MapStyle, string> = {
-  road: 'Road',
-  hybrid: 'Satellite + Roads',
-};
 
 interface RegionSegment {
   id: string;
@@ -112,6 +92,7 @@ interface ActualMomentRow {
 
 interface DayAnnotationRow {
   id: string;
+  authorLabel: string;
   source: string;
   whenLabel: string;
   text: string;
@@ -123,6 +104,9 @@ interface TopPhotoItem {
   whenLabel: string;
   source: string;
   src: string;
+  posterSrc?: string;
+  mimeType?: string;
+  isVideo: boolean;
   alt: string;
   caption: string;
 }
@@ -134,9 +118,37 @@ const PHOTO_SRC_CANONICAL_ALIASES: Record<string, string> = {
   '/actuals/img-1126-2.jpeg': '/actuals/img-1126.jpeg',
 };
 
+function normalizePhotoStem(stem: string): string {
+  let normalized = stem.trim().toLowerCase();
+
+  normalized = normalized.replace(/^(dad|mom)-\d{4}-\d{2}-\d{2}-/, '');
+  normalized = normalized.replace(/^img_/, 'img-');
+  normalized = normalized.replace(/__+/g, '-');
+  normalized = normalized.replace(/[ _]+/g, '-');
+  normalized = normalized.replace(/-copy$/i, '');
+  normalized = normalized.replace(/-duplicate$/i, '');
+  normalized = normalized.replace(/-\(\d+\)$/i, '');
+  normalized = normalized.replace(/-(\d+)$/i, (fullMatch, suffix) => {
+    if (/img-\d+-\d+$/i.test(normalized)) return fullMatch;
+    return Number.parseInt(suffix, 10) <= 9 ? '' : fullMatch;
+  });
+  normalized = normalized.replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+  return normalized;
+}
+
 function normalizePhotoSrc(src: string): string {
   const normalized = src.trim().toLowerCase();
-  return PHOTO_SRC_CANONICAL_ALIASES[normalized] || normalized;
+  const aliased = PHOTO_SRC_CANONICAL_ALIASES[normalized] || normalized;
+  const cleanSrc = aliased.split('?')[0].split('#')[0];
+  const fileName = cleanSrc.split('/').pop() || cleanSrc;
+  const lastDot = fileName.lastIndexOf('.');
+
+  if (lastDot <= 0) return normalizePhotoStem(fileName);
+
+  const stem = fileName.slice(0, lastDot);
+  const ext = fileName.slice(lastDot);
+  return `${normalizePhotoStem(stem)}${ext}`;
 }
 
 function canonicalPhotoSrc(src: string): string {
@@ -149,10 +161,6 @@ function shouldRemovePhotoByMarker(photo: { src: string; alt: string; caption: s
   return REMOVED_PHOTO_FILE_MARKERS.some((marker) => search.includes(marker));
 }
 
-function hasMomentMedia(moment: TripActualMoment): boolean {
-  return moment.photos.length > 0 || (moment.videos?.length ?? 0) > 0;
-}
-
 function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripActualMoment[] {
   if (!moments || moments.length === 0) return [];
 
@@ -160,10 +168,9 @@ function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripAct
     .map((moment) => ({
       ...moment,
       photos: dedupePhotos(moment.photos.filter((photo) => !shouldRemovePhotoByMarker(photo))),
-      videos: dedupeVideos(moment.videos || []),
     }))
     .filter((moment) => {
-      if (hasMomentMedia(moment)) return true;
+      if (moment.photos.length > 0) return true;
       const searchable = `${moment.text} ${moment.whenLabel} ${moment.source}`.toLowerCase();
       return !REMOVED_PHOTO_FILE_MARKERS.some((marker) => searchable.includes(marker));
     });
@@ -178,20 +185,6 @@ function dedupePhotos(photos: TripActualPhoto[]): TripActualPhoto[] {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     deduped.push(photo);
-  }
-
-  return deduped;
-}
-
-function dedupeVideos(videos: TripActualVideo[]): TripActualVideo[] {
-  const seen = new Set<string>();
-  const deduped: TripActualVideo[] = [];
-
-  for (const video of videos) {
-    const key = video.src ? video.src.trim().toLowerCase() : video.id || '';
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(video);
   }
 
   return deduped;
@@ -215,7 +208,6 @@ function mergeActualMoments(
       ...existing,
       ...moment,
       photos: dedupePhotos([...existing.photos, ...moment.photos]),
-      videos: dedupeVideos([...(existing.videos || []), ...(moment.videos || [])]),
     });
   }
 
@@ -300,6 +292,9 @@ function flattenTopPhotoItems(rows: ActualMomentRow[]): TopPhotoItem[] {
         whenLabel: row.moment.whenLabel,
         source: row.moment.source,
         src: photo.src,
+        posterSrc: photo.posterSrc,
+        mimeType: photo.mimeType,
+        isVideo: isVideoMedia(photo),
         alt: photo.alt,
         caption: photo.caption,
       });
@@ -307,6 +302,71 @@ function flattenTopPhotoItems(rows: ActualMomentRow[]): TopPhotoItem[] {
   }
 
   return items;
+}
+
+function photoSourcePriority(source: string): number {
+  const normalized = source.toLowerCase();
+  if (normalized.includes('dad photo dump') || normalized.includes('mom photo dump')) return 0;
+  if (normalized.includes('fam') || normalized.includes('thread')) return 1;
+  return 2;
+}
+
+function dedupePhotoRows(rows: ActualMomentRow[]): ActualMomentRow[] {
+  const winnerByKey = new Map<string, { rowIndex: number; sourcePriority: number }>();
+
+  rows.forEach((row, rowIndex) => {
+    const sourcePriority = photoSourcePriority(row.moment.source);
+    row.moment.photos.forEach((photo) => {
+      const key = normalizePhotoSrc(photo.src);
+      if (!key) return;
+      const existing = winnerByKey.get(key);
+      if (!existing || sourcePriority < existing.sourcePriority || (sourcePriority === existing.sourcePriority && rowIndex < existing.rowIndex)) {
+        winnerByKey.set(key, { rowIndex, sourcePriority });
+      }
+    });
+  });
+
+  const dedupedRows: ActualMomentRow[] = [];
+
+  rows.forEach((row, rowIndex) => {
+    const seenInRow = new Set<string>();
+    const keptPhotos = row.moment.photos.filter((photo) => {
+      const key = normalizePhotoSrc(photo.src);
+      if (!key || seenInRow.has(key)) return false;
+      seenInRow.add(key);
+      return winnerByKey.get(key)?.rowIndex === rowIndex;
+    });
+
+    if (keptPhotos.length === 0) return;
+    dedupedRows.push({
+      ...row,
+      moment: {
+        ...row.moment,
+        photos: keptPhotos,
+      },
+    });
+  });
+
+  return dedupedRows;
+}
+
+function resolveAnnotationAuthor(source: string): string {
+  const normalized = source.toLowerCase();
+  if (normalized.includes('mom updates')) return 'Mom';
+  if (normalized.includes('dad updates')) return 'Dad';
+  return 'Family';
+}
+
+function buildDayAnnotationRows(day: TripDay): DayAnnotationRow[] {
+  return (day.actualMoments || [])
+    .filter((moment) => moment.source.toLowerCase().includes('updates') && moment.text.trim().length > 0)
+    .map((moment) => ({
+      id: moment.id,
+      authorLabel: resolveAnnotationAuthor(moment.source),
+      source: moment.source,
+      whenLabel: moment.whenLabel,
+      text: moment.text,
+    }));
 }
 
 function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode>): TripPlan {
@@ -340,6 +400,24 @@ function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
 
 function getActiveItems(day: TripDay): TripDay['summaryItems'] {
   return day.activeView === 'detail' && day.detailItems.length > 0 ? day.detailItems : day.summaryItems;
+}
+
+function hasItemCoordinates(item: TripDay['summaryItems'][number]): boolean {
+  return typeof item.lat === 'number' && typeof item.lng === 'number';
+}
+
+function getMapItemsForDay(day: TripDay, scope: MapScope): TripDay['summaryItems'] {
+  if (scope === 'day') {
+    return getActiveItems(day);
+  }
+
+  const summaryWithCoords = day.summaryItems.filter(hasItemCoordinates);
+  if (summaryWithCoords.length > 0) return summaryWithCoords;
+
+  const detailWithCoords = day.detailItems.filter(hasItemCoordinates);
+  if (detailWithCoords.length > 0) return detailWithCoords;
+
+  return day.summaryItems;
 }
 
 function defaultWhereAmI(date: string): WhereAmIState {
@@ -416,17 +494,20 @@ export function App() {
   const [manualDayId, setManualDayId] = useState<string>(selectedDate);
   const [manualItemId, setManualItemId] = useState<string>('');
 
-  const initialAppTab = useMemo(() => loadAppViewTab(), []);
+  const initialAppTab = useMemo(() => {
+    const stored = loadAppViewTab();
+    return stored === 'trip_overview' ? 'trip_overview' : 'day_detail';
+  }, []);
   const [activeAppTab, setActiveAppTabState] = useState<AppViewTab>(initialAppTab);
-  const [photoScope, setPhotoScope] = useState<PhotoScope>('selected_day');
   const [activeMobilePanel, setActiveMobilePanelState] = useState<MobilePanel>(() => loadMobilePanel());
   const [mapScopeByTab, setMapScopeByTab] = useState<MapScopeByTab>(() => {
     const defaults = getDefaultMapScopes();
     defaults[initialAppTab] = resolveMapScopeForTab(initialAppTab, {});
     return defaults;
   });
-  const activeMapScope = resolveActiveMapScope(activeAppTab, mapScopeByTab);
-  const [mapStyle, setMapStyle] = useState<MapStyle>('road');
+  const activeMapScope: MapScope = activeAppTab === 'trip_overview' ? 'trip' : 'day';
+  const isFullTripView = activeAppTab === 'trip_overview';
+  const [mapStyle] = useState<MapStyle>('hybrid');
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
@@ -464,8 +545,22 @@ export function App() {
     [tripPlan.days, selectedDate],
   );
   const selectedItems = useMemo(() => getActiveItems(selectedDay), [selectedDay]);
-  const nowAndNext = useMemo(() => getCurrentAndNext(selectedItems), [selectedItems]);
   const regionSegments = useMemo(() => buildRegionSegments(tripPlan.days), [tripPlan.days]);
+  const legByDate = useMemo(() => {
+    const legMap = new Map<string, number>();
+    let legIndex = 0;
+    let previousRegion = '';
+
+    for (const day of tripPlan.days) {
+      if (day.region !== previousRegion) {
+        legIndex += 1;
+        previousRegion = day.region;
+      }
+      legMap.set(day.date, legIndex);
+    }
+
+    return legMap;
+  }, [tripPlan.days]);
   const todayDate = useMemo(() => getTodayInTripRange(tripPlan), [tripPlan]);
   const todayRegion = useMemo(
     () => tripPlan.days.find((day) => day.date === todayDate)?.region || selectedDay.region,
@@ -477,27 +572,15 @@ export function App() {
   const extractEnabled = runtimeCapabilities.features.extract;
   const dayModeLabel = selectedDay.activeView === 'detail' ? 'Detailed Plan' : 'Trip Summary';
   const selectedActualMoments = selectedDay.actualMoments || [];
-  const selectedDayAnnotations = useMemo<DayAnnotationRow[]>(
-    () =>
-      selectedActualMoments
-        .filter((moment) => moment.source.toLowerCase().includes('dad updates') && moment.text.trim().length > 0)
-        .map((moment) => ({
-          id: moment.id,
-          source: moment.source,
-          whenLabel: moment.whenLabel,
-          text: moment.text,
-        })),
-    [selectedActualMoments],
-  );
+  const selectedDayAnnotations = useMemo<DayAnnotationRow[]>(() => buildDayAnnotationRows(selectedDay), [selectedDay]);
   const selectedActualMomentRows = useMemo(
     () => selectedActualMoments.map((moment) => ({ date: selectedDate, moment })),
     [selectedDate, selectedActualMoments],
   );
   const selectedDayPhotoRows = useMemo(
-    () => selectedActualMomentRows.filter((row) => hasMomentMedia(row.moment)),
+    () => dedupePhotoRows(selectedActualMomentRows.filter((row) => row.moment.photos.length > 0)),
     [selectedActualMomentRows],
   );
-  const selectedDateMs = useMemo(() => parseTripDateMs(selectedDate), [selectedDate]);
   const photoDates = useMemo(
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
@@ -507,35 +590,16 @@ export function App() {
       tripPlan.days
         .flatMap((day) =>
           (day.actualMoments || [])
-            .filter((moment) => hasMomentMedia(moment))
+            .filter((moment) => moment.photos.length > 0)
             .map((moment) => ({ date: day.date, moment })),
         )
       .sort((a, b) => b.date.localeCompare(a.date)),
     [tripPlan.days],
   );
-  const fullTripPhotoRows = useMemo(() => tripPhotoMomentRows, [tripPhotoMomentRows]);
-  const nearbyTripPhotoRows = useMemo(() => {
-    const hasSelectedTimestamp = Number.isFinite(selectedDateMs);
-
-    return tripPhotoMomentRows
-      .filter((row) => row.date !== selectedDate)
-      .sort((a, b) => {
-        if (!hasSelectedTimestamp) return b.date.localeCompare(a.date);
-
-        const aDistance = Math.abs(parseTripDateMs(a.date) - selectedDateMs);
-        const bDistance = Math.abs(parseTripDateMs(b.date) - selectedDateMs);
-        if (aDistance === bDistance) return b.date.localeCompare(a.date);
-        return aDistance - bDistance;
-      });
-  }, [selectedDate, selectedDateMs, tripPhotoMomentRows]);
-  const mainPagePhotoRows = useMemo(
-    () => (selectedDayPhotoRows.length > 0 ? selectedDayPhotoRows : nearbyTripPhotoRows.slice(0, 20)),
-    [nearbyTripPhotoRows, selectedDayPhotoRows],
-  );
-  const mainPageUsesNearbyFallback = selectedDayPhotoRows.length === 0 && mainPagePhotoRows.length > 0;
+  const fullTripPhotoRows = useMemo(() => dedupePhotoRows(tripPhotoMomentRows), [tripPhotoMomentRows]);
   const galleryPhotoRows = useMemo(
-    () => (photoScope === 'selected_day' ? selectedDayPhotoRows : fullTripPhotoRows),
-    [fullTripPhotoRows, photoScope, selectedDayPhotoRows],
+    () => (isFullTripView ? fullTripPhotoRows : selectedDayPhotoRows),
+    [fullTripPhotoRows, isFullTripView, selectedDayPhotoRows],
   );
   const selectedDayTopPhotoItems = useMemo(
     () => flattenTopPhotoItems(selectedDayPhotoRows),
@@ -543,8 +607,8 @@ export function App() {
   );
   const fullTripTopPhotoItems = useMemo(() => flattenTopPhotoItems(fullTripPhotoRows), [fullTripPhotoRows]);
   const topPhotoItems = useMemo(
-    () => (photoScope === 'selected_day' ? selectedDayTopPhotoItems : fullTripTopPhotoItems),
-    [fullTripTopPhotoItems, photoScope, selectedDayTopPhotoItems],
+    () => (isFullTripView ? fullTripTopPhotoItems : selectedDayTopPhotoItems),
+    [fullTripTopPhotoItems, isFullTripView, selectedDayTopPhotoItems],
   );
 
   const mapStops = useMemo<MapStop[]>(() => {
@@ -563,7 +627,7 @@ export function App() {
 
     return tripPlan.days
       .map((day) => {
-        const firstWithCoords = getActiveItems(day).find(
+        const firstWithCoords = getMapItemsForDay(day, 'trip').find(
           (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
         );
         if (!firstWithCoords) return null;
@@ -646,11 +710,10 @@ export function App() {
       date,
     );
     applyNavigation(next);
-    const nextScope = resolveActiveMapScope(next.activeAppTab, next.mapScopeByTab);
     if (isMobile) {
       setMobilePanel(mobilePanelOnMobile);
     }
-    return nextScope;
+    return 'day' as const;
   }
 
   function goToToday() {
@@ -666,21 +729,20 @@ export function App() {
     postAlert('info', `Jumped to ${formatDateLabel(todayDate)}.`);
   }
 
+  function setGlobalViewMode(mode: PhotoScope) {
+    if (mode === 'full_trip') {
+      setAppTab('trip_overview');
+      if (isMobile) setMobilePanel('map');
+      return;
+    }
+
+    setAppTab('day_detail');
+    if (isMobile) setMobilePanel('plan');
+  }
+
   function jumpToPhotoDate(date: string) {
     setDateAndOpenDayDetail(date, 'plan');
     trackEvent('top_photo_jump');
-  }
-
-  function setMapScopeForActiveTab(scope: MapScope) {
-    const next = transitionMapScopeFromControl(
-      {
-        activeAppTab,
-        selectedDate,
-        mapScopeByTab,
-      },
-      scope,
-    );
-    applyNavigation(next);
   }
 
   function retryMapInit() {
@@ -690,11 +752,11 @@ export function App() {
   }
 
   function focusMapStop(stop: MapStop) {
-    const scope = setDateAndOpenDayDetail(stop.date, 'map');
+    setDateAndOpenDayDetail(stop.date, 'map');
 
     if (!mapRef.current) return;
 
-    mapRef.current.setView([stop.lat, stop.lng], scope === 'trip' ? 8 : 11, {
+    mapRef.current.setView([stop.lat, stop.lng], 11, {
       animate: true,
     });
     setStatusMessage(`Focused map on ${stop.label}.`);
@@ -716,21 +778,9 @@ export function App() {
     const apply = () => setIsMobile(media.matches);
     apply();
 
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', apply);
-      return () => {
-        media.removeEventListener('change', apply);
-      };
-    }
-
-    // Safari legacy fallback (pre-addEventListener on MediaQueryList)
-    const legacyMedia = media as MediaQueryList & {
-      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
-    };
-    legacyMedia.addListener?.(apply as (event: MediaQueryListEvent) => void);
+    media.addEventListener('change', apply);
     return () => {
-      legacyMedia.removeListener?.(apply as (event: MediaQueryListEvent) => void);
+      media.removeEventListener('change', apply);
     };
   }, []);
 
@@ -857,7 +907,8 @@ export function App() {
           opacity: 0.38,
         });
 
-        roadBaseLayer.addTo(map);
+        satelliteLayer.addTo(map);
+        roadOverlayLayer.addTo(map);
 
         const markerLayer = L.layerGroup().addTo(map);
         mapRef.current = map;
@@ -971,12 +1022,13 @@ export function App() {
     const selectedDayCoords: [number, number][] = [];
 
     for (const day of tripPlan.days) {
-      const items = getActiveItems(day);
+      const items = getMapItemsForDay(day, activeMapScope);
       const color = regionColor(day.region);
       const fullTripLineColor = seasonalTripLineColor(day.date, tripPlan.startDate, tripPlan.endDate);
+      const legNumber = legByDate.get(day.date) || 1;
       const isSelectedDate = day.date === selectedDate;
       const isTodayDate = day.date === todayDate;
-      const hasPhotos = dayHasPhotos(day);
+      const hasMedia = dayHasPhotos(day);
 
       const coords = items
         .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
@@ -992,10 +1044,10 @@ export function App() {
         });
 
         marker.bindPopup(
-          `<b>${formatDateLabel(day.date)}</b>${isTodayDate ? ' (Today)' : ''}${hasPhotos ? ' (Photos)' : ''}<br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<b>${formatDateLabel(day.date)}</b>${isTodayDate ? ' (Today)' : ''}${hasMedia ? ' (Media)' : ''}<br/>Leg ${legNumber} - ${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
         );
         marker.bindTooltip(
-          `<strong>${formatDateLabel(day.date)}${isTodayDate ? ' - Today' : ''}${hasPhotos ? ' - Photos' : ''}</strong><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<strong>${formatDateLabel(day.date)}${isTodayDate ? ' - Today' : ''}${hasMedia ? ' - Media' : ''}</strong><br/>Leg ${legNumber} - ${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
           {
             direction: 'top',
             sticky: true,
@@ -1037,6 +1089,44 @@ export function App() {
             }),
           );
         }
+      }
+    }
+
+    if (activeMapScope === 'trip') {
+      const dayAnchors = tripPlan.days
+        .map((day) => {
+          const firstWithCoords = getMapItemsForDay(day, 'trip').find(
+            (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
+          );
+          if (!firstWithCoords) return null;
+          return {
+            date: day.date,
+            region: day.region,
+            leg: legByDate.get(day.date) || 1,
+            coord: [firstWithCoords.lat as number, firstWithCoords.lng as number] as [number, number],
+          };
+        })
+        .filter((anchor): anchor is { date: string; region: string; leg: number; coord: [number, number] } => Boolean(anchor));
+
+      for (let index = 1; index < dayAnchors.length; index += 1) {
+        const previous = dayAnchors[index - 1];
+        const current = dayAnchors[index];
+        const linkage = L.polyline([previous.coord, current.coord], {
+          color: seasonalTripLineColor(current.date, tripPlan.startDate, tripPlan.endDate),
+          weight: 2.6,
+          opacity: 0.66,
+        });
+
+        linkage.bindTooltip(
+          `Leg ${current.leg} link: ${formatDateLabel(previous.date)} -> ${formatDateLabel(current.date)}`,
+          {
+            direction: 'center',
+            sticky: true,
+            opacity: 0.94,
+            className: 'map-tooltip',
+          },
+        );
+        markerLayerRef.current.addLayer(linkage);
       }
     }
 
@@ -1117,6 +1207,7 @@ export function App() {
     leafletModule,
     todayDate,
     todayRegion,
+    legByDate,
   ]);
 
   useEffect(() => {
@@ -1319,10 +1410,10 @@ export function App() {
   ) {
     return (
       <article className={`card ${className}`.trim()}>
-        <h2>Family Photos & Videos</h2>
+        <h2>Family Media</h2>
         <p className="hint">Pulled from the B-G-M Fam iMessage export and matched to trip moments.</p>
         {showRecentFallback && rows.length > 0 ? (
-          <p className="hint">No media for this day. Showing recent photos/videos from nearby trip days.</p>
+          <p className="hint">No media for this day. Showing recent items from nearby trip days.</p>
         ) : null}
         {rows.length === 0 ? (
           <p className="hint">No extracted moments saved yet.</p>
@@ -1336,32 +1427,42 @@ export function App() {
                 {row.date !== selectedDate ? <span className="pill">{formatDateLabel(row.date)}</span> : null}
               </div>
                 <p>{row.moment.text}</p>
-                {hasMomentMedia(row.moment) ? (
-                  <div className="actual-photo-grid">
+                {row.moment.photos.length > 0 ? (
+                    <div className="actual-photo-grid">
                     {row.moment.photos.map((photo) => (
-                      <figure key={photo.id} className="actual-photo-card">
+                    <figure key={photo.id} className="actual-photo-card">
+                      {isVideoMedia(photo) ? (
+                        <video
+                          src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
+                          controls={photo.controls ?? true}
+                          autoPlay={photo.autoplay ?? false}
+                          loop={photo.loop ?? false}
+                          muted={photo.muted ?? false}
+                          playsInline
+                          preload={photo.preload || 'metadata'}
+                          poster={
+                            photo.posterSrc
+                              ? resolvePublicAssetUrl(canonicalPhotoSrc(photo.posterSrc), import.meta.env.BASE_URL)
+                              : undefined
+                          }
+                          aria-label={photo.alt}
+                        >
+                          <source
+                            src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
+                            type={inferVideoMimeType(photo.src, photo.mimeType)}
+                          />
+                        </video>
+                      ) : (
                         <img
                           src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
                           alt={photo.alt}
                           loading="lazy"
                         />
-                        <figcaption>{photo.caption}</figcaption>
+                      )}
+                      <figcaption>{photo.caption}</figcaption>
                       </figure>
                     ))}
-                    {(row.moment.videos || []).map((video) => (
-                      <figure key={video.id} className="actual-photo-card">
-                        <video
-                          controls
-                          preload="metadata"
-                          playsInline
-                          poster={video.poster ? resolvePublicAssetUrl(video.poster, import.meta.env.BASE_URL) : undefined}
-                        >
-                          <source src={resolvePublicAssetUrl(video.src, import.meta.env.BASE_URL)} />
-                        </video>
-                        <figcaption>{video.caption}</figcaption>
-                      </figure>
-                    ))}
-                  </div>
+                    </div>
                 ) : null}
             </li>
           ))}
@@ -1375,35 +1476,9 @@ export function App() {
     return (
       <section className={`map-shell card ${className}`.trim()}>
         <h2>Map</h2>
-        <div className="map-scope-toggle" role="group" aria-label="Map scope">
-          {(['day', 'trip'] as MapScope[]).map((scope) => (
-            <button
-              key={scope}
-              type="button"
-              className={activeMapScope === scope ? 'active' : ''}
-              onClick={() => setMapScopeForActiveTab(scope)}
-              aria-pressed={activeMapScope === scope}
-            >
-              {MAP_SCOPE_LABEL[scope]}
-            </button>
-          ))}
-        </div>
-        <div className="map-style-toggle" role="group" aria-label="Map style">
-          {(['road', 'hybrid'] as MapStyle[]).map((style) => (
-            <button
-              key={style}
-              type="button"
-              className={mapStyle === style ? 'active' : ''}
-              onClick={() => setMapStyle(style)}
-              aria-pressed={mapStyle === style}
-            >
-              {MAP_STYLE_LABEL[style]}
-            </button>
-          ))}
-        </div>
         <p className="map-meta">
           {activeMapScope === 'trip'
-            ? 'Full-trip overview. Use Selected Day to zoom in quickly.'
+            ? 'Full-trip overview with day-to-day route linkages.'
             : `Focused on ${formatDateLabel(selectedDate)} (${selectedDay.region}).`}
         </p>
 
@@ -1446,7 +1521,7 @@ export function App() {
                     <small>
                       {formatDateLabel(stop.date)} - {stop.region}
                       {stop.date === todayDate ? ' (Today)' : ''}
-                      {photoDates.has(stop.date) ? ' (Photos)' : ''}
+                      {photoDates.has(stop.date) ? ' (Media)' : ''}
                     </small>
                   </div>
                   <button type="button" className="secondary-btn" onClick={() => focusMapStop(stop)}>
@@ -1486,174 +1561,134 @@ export function App() {
         {statusMessage}
       </p>
 
-      {activeAppTab === 'photo_gallery' ? (
-        <section className="top-photo-shell card" aria-label="Quick photo rail">
-          <div className="top-photo-header">
-            <div>
-              <h2>Trip Photos</h2>
-              <p className="hint">Quickly scan photos/videos and jump to that day.</p>
-            </div>
-            <div className="toggle-row top-photo-scope">
-              <button
-                type="button"
-                className={photoScope === 'selected_day' ? 'active' : ''}
-                onClick={() => setPhotoScope('selected_day')}
-              >
-                Selected Day ({selectedDayTopPhotoItems.length})
-              </button>
-              <button
-                type="button"
-                className={photoScope === 'full_trip' ? 'active' : ''}
-                onClick={() => setPhotoScope('full_trip')}
-              >
-                Full Trip ({fullTripTopPhotoItems.length})
-              </button>
-            </div>
-          </div>
-          {topPhotoItems.length === 0 ? (
+      <section className="top-photo-shell card" aria-label="Quick media rail">
+        <div className="top-photo-header">
+          <div>
+            <h2>Trip Media</h2>
             <p className="hint">
-              {photoScope === 'selected_day'
-                ? `No media mapped for ${formatDateLabel(selectedDate)}.`
-                : 'No photos/videos are currently mapped.'}
+              {isFullTripView
+                ? `Showing all mapped media across the trip (${fullTripTopPhotoItems.length}).`
+                : `Showing media for ${formatDateLabel(selectedDate)} (${selectedDayTopPhotoItems.length}).`}
             </p>
-          ) : (
-            <ul className="top-photo-strip">
-              {topPhotoItems.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={`top-photo-item ${item.date === selectedDate ? 'is-selected' : ''}`}
-                    onClick={() => jumpToPhotoDate(item.date)}
-                    title={`${formatDateLabel(item.date)} - ${item.whenLabel}`}
-                  >
+          </div>
+        </div>
+        {topPhotoItems.length === 0 ? (
+          <p className="hint">
+            {!isFullTripView
+              ? `No media mapped for ${formatDateLabel(selectedDate)}.`
+              : 'No media is currently mapped.'}
+          </p>
+        ) : (
+          <ul className="top-photo-strip">
+            {topPhotoItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className={`top-photo-item ${item.date === selectedDate ? 'is-selected' : ''}`}
+                  onClick={() => jumpToPhotoDate(item.date)}
+                  title={`${formatDateLabel(item.date)} - ${item.whenLabel}`}
+                >
+                  {item.isVideo ? (
+                    item.posterSrc ? (
+                      <img
+                        src={resolvePublicAssetUrl(canonicalPhotoSrc(item.posterSrc), import.meta.env.BASE_URL)}
+                        alt={item.alt}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <video
+                        src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        aria-label={item.alt}
+                      >
+                        <source
+                          src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
+                          type={inferVideoMimeType(item.src, item.mimeType)}
+                        />
+                      </video>
+                    )
+                  ) : (
                     <img
                       src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
                       alt={item.alt}
                       loading="lazy"
                     />
-                    <span className="top-photo-item-date">{formatDateLabel(item.date)}</span>
-                    <span className="top-photo-item-caption">{item.caption}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
+                  )}
+                  <span className="top-photo-item-date">{formatDateLabel(item.date)}</span>
+                  <span className="top-photo-item-caption">{item.caption}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="title-toolbar" aria-label="Trip controls">
-        <nav className="toolbar-tabs" aria-label="Primary view tabs">
-          {(['trip_overview', 'day_detail', 'photo_gallery'] as AppViewTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`app-tab ${activeAppTab === tab ? 'active' : ''}`}
-              onClick={() => setAppTab(tab)}
-            >
-              {APP_TAB_LABEL[tab]}
-            </button>
-          ))}
-        </nav>
-
         <div className="toolbar-pill-row">
-          {activeAppTab === 'day_detail' || activeAppTab === 'photo_gallery' ? (
-            <>
-              <details className="toolbar-popover">
-                <summary>{formatDateLabel(selectedDate)}</summary>
-                <div className="toolbar-popover-body">
-                  <label htmlFor="toolbar-day-select">Date</label>
-                  <select
-                    id="toolbar-day-select"
-                    value={selectedDate}
-                    onChange={(event) => setDateOnly(event.target.value)}
-                  >
-                    {tripPlan.days.map((day) => (
-                      <option key={day.date} value={day.date}>
-                        {dayOptionLabel(day, todayDate)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </details>
+          <div className="row toolbar-date-row">
+            <label htmlFor="toolbar-day-select">Day</label>
+            <select
+              id="toolbar-day-select"
+              value={selectedDate}
+              onChange={(event) => setDateOnly(event.target.value)}
+            >
+              {tripPlan.days.map((day) => (
+                <option key={day.date} value={day.date}>
+                  {dayOptionLabel(day, todayDate)}
+                </option>
+              ))}
+            </select>
+          </div>
 
-              <details className="toolbar-popover">
-                <summary>{selectedDay.region}</summary>
-                <div className="toolbar-popover-body">
-                  <label htmlFor="toolbar-region-select">Region</label>
-                  <select
-                    id="toolbar-region-select"
-                    value={selectedDay.region}
-                    onChange={(event) => {
-                      const next = tripPlan.days.find((day) => day.region === event.target.value);
-                      if (next) setDateOnly(next.date);
-                    }}
-                  >
-                    {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
-                      <option key={region} value={region}>
-                        {region}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </details>
-
-              {activeAppTab === 'day_detail' ? (
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => setDayViewMode(selectedDay.date, selectedDay.activeView === 'detail' ? 'summary' : 'detail')}
-                >
-                  {dayModeLabel}
-                </button>
-              ) : null}
-            </>
-          ) : null}
-
-          {activeAppTab !== 'photo_gallery' ? (
+          <div className="toggle-row toolbar-mode-toggle" role="group" aria-label="View mode">
             <button
               type="button"
-              className="secondary-btn"
-              onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
+              className={!isFullTripView ? 'active' : ''}
+              onClick={() => setGlobalViewMode('selected_day')}
+              aria-pressed={!isFullTripView}
             >
-              Map: {MAP_SCOPE_LABEL[activeMapScope]}
+              Selected Day
             </button>
+            <button
+              type="button"
+              className={isFullTripView ? 'active' : ''}
+              onClick={() => setGlobalViewMode('full_trip')}
+              aria-pressed={isFullTripView}
+            >
+              Full Trip
+            </button>
+          </div>
+
+          {!isFullTripView ? (
+            <div className="toggle-row toolbar-day-mode-toggle" role="group" aria-label="Day summary mode">
+              <button
+                type="button"
+                className={selectedDay.activeView === 'summary' ? 'active' : ''}
+                onClick={() => setDayViewMode(selectedDay.date, 'summary')}
+              >
+                Trip Summary
+              </button>
+              <button
+                type="button"
+                className={selectedDay.activeView === 'detail' ? 'active' : ''}
+                disabled={selectedDay.detailItems.length === 0}
+                onClick={() => setDayViewMode(selectedDay.date, 'detail')}
+              >
+                Detailed Plan
+              </button>
+            </div>
           ) : null}
 
           <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
             Back to Today
           </button>
-
-          <details className={`toolbar-popover runtime ${runtimeCapabilities.mode}`}>
-            <summary>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</summary>
-            <div className="toolbar-popover-body">
-              <p>Feature: Upload extract {extractEnabled ? 'on' : 'off'}. Suggestions and chat are hidden.</p>
-            </div>
-          </details>
-
-          {uiAlert ? (
-            <details className={`toolbar-popover alert ${uiAlert.level}`}>
-              <summary>{uiAlert.message}</summary>
-              <div className="toolbar-popover-body">
-                <button type="button" className="secondary-btn" onClick={() => setUiAlert(null)}>
-                  Dismiss
-                </button>
-              </div>
-            </details>
-          ) : null}
         </div>
-
-        {activeAppTab === 'day_detail' ? (
-          <div className="toolbar-now-row">
-            <span>Now: {nowAndNext.current ? nowAndNext.current.title : 'No active block'}</span>
-            <span>Next: {nowAndNext.next ? nowAndNext.next.title : 'No upcoming block'}</span>
-            <span>Where am I: {whereAmI.confidence}</span>
-            <span>Mode: {whereAmI.mode}</span>
-          </div>
-        ) : null}
       </section>
 
       <section id="primary-content">
-        {activeAppTab === 'day_detail' && isMobile ? (
+        {!isFullTripView && isMobile ? (
           <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
             {(['map', 'plan'] as MobilePanel[]).map((panel) => (
               <button
@@ -1669,162 +1704,88 @@ export function App() {
         ) : null}
 
         <section className="primary-layout">
-          {activeAppTab !== 'photo_gallery'
-            ? renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)
-            : null}
+          {renderMapCard(`primary-map ${!isFullTripView ? panelHiddenClass('map') : ''}`)}
 
-          {activeAppTab === 'trip_overview' ? (
-            <>
-              <section className="trip-overview-grid">
-                <article className="card">
-                  <h2>Trip Timeline</h2>
-                  <p>Jump by date or region. The map stays on your full plan.</p>
-                  <div className="row">
-                    <label htmlFor="overview-day-select">Date jump</label>
-                    <select
-                      id="overview-day-select"
-                      value={selectedDate}
-                      onChange={(event) => setDateOnly(event.target.value)}
-                    >
-                      {tripPlan.days.map((day) => (
-                        <option key={day.date} value={day.date}>
-                          {dayOptionLabel(day, todayDate)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="row">
-                    <label htmlFor="overview-region-select">Region jump</label>
-                    <select
-                      id="overview-region-select"
-                      value={selectedDay.region}
-                      onChange={(event) => {
-                        const next = tripPlan.days.find((day) => day.region === event.target.value);
-                        if (next) setDateOnly(next.date);
-                      }}
-                    >
-                      {[...new Set(tripPlan.days.map((day) => day.region))].map((region) => (
-                        <option key={region} value={region}>
-                          {region}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+          {isFullTripView ? (
+            <section className="dashboard-grid secondary-grid">
+              <article className="card">
+                <h2>Full Trip Itinerary</h2>
+                <p className="hint">All days with leg labels, mapped stops, and direct parent quotes by day.</p>
+                <ul className="day-overview-list">
+                  {tripPlan.days.map((day) => {
+                    const dayAnnotations = buildDayAnnotationRows(day);
+                    const legNumber = legByDate.get(day.date) || 1;
+                    const dayItems = getActiveItems(day);
+                    const leadItem = dayItems[0] || day.summaryItems[0];
 
-                  <ul className="day-overview-list">
-                    {tripPlan.days.map((day) => (
-                      <li
-                        key={`overview-day-${day.date}`}
-                        className={`day-row ${day.date === todayDate ? 'is-today' : ''} ${day.date === selectedDate ? 'is-selected' : ''}`}
-                      >
-                        <button type="button" className="day-row-button" onClick={() => setDateAndOpenDayDetail(day.date)}>
-                          <span>{formatDateLabel(day.date)}</span>
-                          <small>{day.region}</small>
-                        </button>
-                        <div className="day-row-tags">
-                          {dayHasPhotos(day) ? <span className="photo-tag">Pics</span> : null}
-                          {day.date === todayDate ? <span className="today-tag">Today</span> : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-
-                <article className="card">
-                  <h2>Region Legs</h2>
-                  <ul className="region-overview-list">
-                    {regionSegments.map((segment) => (
-                      <li
-                        key={segment.id}
-                        className={`region-row ${todayDate >= segment.startDate && todayDate <= segment.endDate ? 'is-today' : ''}`}
-                      >
-                        <div>
-                          <strong>{segment.region}</strong>
-                          <p>
-                            {formatDateLabel(segment.startDate)} to {formatDateLabel(segment.endDate)} ({segment.days}{' '}
-                            {segment.days === 1 ? 'day' : 'days'})
-                          </p>
-                          {todayDate >= segment.startDate && todayDate <= segment.endDate ? (
-                            <span className="today-tag">Current Region</span>
+                    return (
+                      <li key={`full-trip-day-${day.date}`} className={`day-row ${day.date === todayDate ? 'is-today' : ''}`}>
+                        <div className="full-trip-day-row">
+                          <div className="pill-row compact">
+                            <span className="pill">Leg {legNumber}</span>
+                            <span className="pill">{formatDateLabel(day.date)}</span>
+                            <span className="pill">{day.region}</span>
+                            {dayHasPhotos(day) ? <span className="photo-tag">Media</span> : null}
+                          </div>
+                          <p className="full-trip-day-summary">{leadItem?.title || 'Itinerary day'}</p>
+                          {dayAnnotations.length > 0 ? (
+                            <ul className="day-annotation-list">
+                              {dayAnnotations.map((annotation) => (
+                                <li key={annotation.id}>
+                                  <div className="day-annotation-meta">
+                                    <span className="day-annotation-tag">
+                                      {annotation.authorLabel === 'Family' ? 'Family note' : `${annotation.authorLabel} note`}
+                                    </span>
+                                    <span className="pill">{annotation.whenLabel}</span>
+                                  </div>
+                                  <blockquote>{annotation.text}</blockquote>
+                                </li>
+                              ))}
+                            </ul>
                           ) : null}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setDateAndOpenDayDetail(segment.startDate);
-                          }}
-                        >
-                          Open Day
-                        </button>
                       </li>
-                    ))}
-                  </ul>
-                </article>
-              </section>
-            </>
-          ) : activeAppTab === 'photo_gallery' ? (
-            <>
-              <section className="dashboard-grid secondary-grid single-column">
-                <article className="card">
-                  <h2>Gallery View</h2>
-                  {photoScope === 'selected_day' ? (
-                    <p className="hint">
-                      Using top-of-screen filter: {formatDateLabel(selectedDate)} ({selectedDay.region}).
-                    </p>
-                  ) : (
-                    <p className="hint">Using top-of-screen filter: full-trip photo set.</p>
-                  )}
-                </article>
-
-                {renderActualMomentsCard('', galleryPhotoRows)}
-              </section>
-            </>
+                    );
+                  })}
+                </ul>
+              </article>
+              {renderActualMomentsCard('', galleryPhotoRows)}
+            </section>
           ) : (
             <>
               <section className="dashboard-grid secondary-grid">
                 <article className={`card ${panelHiddenClass('plan')}`}>
-                  <h2>Day Timeline</h2>
-                  <div className="toggle-row">
-                    <button
-                      type="button"
-                      className={selectedDay.activeView === 'detail' ? 'active' : ''}
-                      disabled={selectedDay.detailItems.length === 0}
-                      onClick={() => setDayViewMode(selectedDay.date, 'detail')}
-                    >
-                      Detailed Plan
-                    </button>
-                    <button
-                      type="button"
-                      className={selectedDay.activeView === 'summary' ? 'active' : ''}
-                      onClick={() => setDayViewMode(selectedDay.date, 'summary')}
-                    >
-                      Trip Summary
-                    </button>
-                  </div>
+                  <h2>Selected Day Summary</h2>
+                  <p className="hint">
+                    {formatDateLabel(selectedDate)} - {selectedDay.region}
+                  </p>
+                  <p className="full-trip-day-summary">{selectedItems[0]?.title || 'No itinerary summary available.'}</p>
                   <section
                     className={`day-annotations ${selectedDayAnnotations.length === 0 ? 'is-empty' : ''}`}
-                    aria-label="Dad updates"
+                    aria-label="Family updates"
                   >
                     <div className="day-annotations-header">
-                      <h3>Dad Updates</h3>
+                      <h3>Family Updates</h3>
                       <span className="day-annotations-count">{selectedDayAnnotations.length}</span>
                     </div>
-                    <p className="day-annotations-subtitle">Highlighted notes from dad&apos;s family-thread updates.</p>
+                    <p className="day-annotations-subtitle">Highlighted notes from family-thread text updates.</p>
                     {selectedDayAnnotations.length > 0 ? (
                       <ul className="day-annotation-list">
                         {selectedDayAnnotations.map((annotation) => (
                           <li key={annotation.id}>
                             <div className="day-annotation-meta">
-                              <span className="day-annotation-tag">Dad note</span>
+                              <span className="day-annotation-tag">
+                                {annotation.authorLabel === 'Family' ? 'Family note' : `${annotation.authorLabel} note`}
+                              </span>
                               <span className="pill">{annotation.whenLabel}</span>
                             </div>
-                            <p>{annotation.text}</p>
+                            <blockquote>{annotation.text}</blockquote>
                             <small>{annotation.source}</small>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="day-annotations-empty">No dad updates logged for {formatDateLabel(selectedDate)}.</p>
+                      <p className="day-annotations-empty">No family updates logged for {formatDateLabel(selectedDate)}.</p>
                     )}
                   </section>
                   <ol className="timeline-list">
@@ -1846,8 +1807,8 @@ export function App() {
 
                 {renderActualMomentsCard(
                   `focus-moments ${panelHiddenClass('plan')}`,
-                  mainPagePhotoRows,
-                  mainPageUsesNearbyFallback,
+                  galleryPhotoRows,
+                  false,
                 )}
               </section>
             </>

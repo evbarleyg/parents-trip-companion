@@ -7,7 +7,7 @@
     "dev": "wrangler dev src/index.ts --local",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --config vitest.config.ts",
     "build": "tsc --noEmit"
   },
   "dependencies": {
