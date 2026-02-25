@@ -117,16 +117,6 @@ interface DayAnnotationRow {
   text: string;
 }
 
-interface TopPhotoItem {
-  id: string;
-  date: string;
-  whenLabel: string;
-  source: string;
-  src: string;
-  alt: string;
-  caption: string;
-}
-
 type PhotoScope = 'selected_day' | 'full_trip';
 
 const REMOVED_PHOTO_FILE_MARKERS = ['img_4017.jpeg', 'img_4024.jpeg', 'img_4041.jpeg'];
@@ -282,31 +272,6 @@ function seasonalTripLineColor(date: string, startDate: string, endDate: string)
   }
 
   return blendHexColors(thaw, spring, (progress - 0.5) / 0.5);
-}
-
-function flattenTopPhotoItems(rows: ActualMomentRow[]): TopPhotoItem[] {
-  const seen = new Set<string>();
-  const items: TopPhotoItem[] = [];
-
-  for (const row of rows) {
-    for (const photo of row.moment.photos) {
-      const dedupeKey = normalizePhotoSrc(photo.src);
-      if (seen.has(dedupeKey)) continue;
-      seen.add(dedupeKey);
-
-      items.push({
-        id: `${row.date}-${row.moment.id}-${photo.id}`,
-        date: row.date,
-        whenLabel: row.moment.whenLabel,
-        source: row.moment.source,
-        src: photo.src,
-        alt: photo.alt,
-        caption: photo.caption,
-      });
-    }
-  }
-
-  return items;
 }
 
 function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode>): TripPlan {
@@ -537,15 +502,6 @@ export function App() {
     () => (photoScope === 'selected_day' ? selectedDayPhotoRows : fullTripPhotoRows),
     [fullTripPhotoRows, photoScope, selectedDayPhotoRows],
   );
-  const selectedDayTopPhotoItems = useMemo(
-    () => flattenTopPhotoItems(selectedDayPhotoRows),
-    [selectedDayPhotoRows],
-  );
-  const fullTripTopPhotoItems = useMemo(() => flattenTopPhotoItems(fullTripPhotoRows), [fullTripPhotoRows]);
-  const topPhotoItems = useMemo(
-    () => (photoScope === 'selected_day' ? selectedDayTopPhotoItems : fullTripTopPhotoItems),
-    [fullTripTopPhotoItems, photoScope, selectedDayTopPhotoItems],
-  );
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (activeMapScope === 'day') {
@@ -664,11 +620,6 @@ export function App() {
     );
     applyNavigation(next);
     postAlert('info', `Jumped to ${formatDateLabel(todayDate)}.`);
-  }
-
-  function jumpToPhotoDate(date: string) {
-    setDateAndOpenDayDetail(date, 'plan');
-    trackEvent('top_photo_jump');
   }
 
   function setMapScopeForActiveTab(scope: MapScope) {
@@ -1486,61 +1437,6 @@ export function App() {
         {statusMessage}
       </p>
 
-      {activeAppTab === 'photo_gallery' ? (
-        <section className="top-photo-shell card" aria-label="Quick photo rail">
-          <div className="top-photo-header">
-            <div>
-              <h2>Trip Photos</h2>
-              <p className="hint">Quickly scan photos/videos and jump to that day.</p>
-            </div>
-            <div className="toggle-row top-photo-scope">
-              <button
-                type="button"
-                className={photoScope === 'selected_day' ? 'active' : ''}
-                onClick={() => setPhotoScope('selected_day')}
-              >
-                Selected Day ({selectedDayTopPhotoItems.length})
-              </button>
-              <button
-                type="button"
-                className={photoScope === 'full_trip' ? 'active' : ''}
-                onClick={() => setPhotoScope('full_trip')}
-              >
-                Full Trip ({fullTripTopPhotoItems.length})
-              </button>
-            </div>
-          </div>
-          {topPhotoItems.length === 0 ? (
-            <p className="hint">
-              {photoScope === 'selected_day'
-                ? `No media mapped for ${formatDateLabel(selectedDate)}.`
-                : 'No photos/videos are currently mapped.'}
-            </p>
-          ) : (
-            <ul className="top-photo-strip">
-              {topPhotoItems.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={`top-photo-item ${item.date === selectedDate ? 'is-selected' : ''}`}
-                    onClick={() => jumpToPhotoDate(item.date)}
-                    title={`${formatDateLabel(item.date)} - ${item.whenLabel}`}
-                  >
-                    <img
-                      src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
-                      alt={item.alt}
-                      loading="lazy"
-                    />
-                    <span className="top-photo-item-date">{formatDateLabel(item.date)}</span>
-                    <span className="top-photo-item-caption">{item.caption}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ) : null}
-
       <section className="title-toolbar" aria-label="Trip controls">
         <nav className="toolbar-tabs" aria-label="Primary view tabs">
           {(['trip_overview', 'day_detail', 'photo_gallery'] as AppViewTab[]).map((tab) => (
@@ -1609,15 +1505,13 @@ export function App() {
             </>
           ) : null}
 
-          {activeAppTab !== 'photo_gallery' ? (
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
-            >
-              Map: {MAP_SCOPE_LABEL[activeMapScope]}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setMapScopeForActiveTab(activeMapScope === 'trip' ? 'day' : 'trip')}
+          >
+            Map: {MAP_SCOPE_LABEL[activeMapScope]}
+          </button>
 
           <button type="button" className="secondary-btn" onClick={goToToday} disabled={selectedDate === todayDate}>
             Back to Today
@@ -1669,9 +1563,7 @@ export function App() {
         ) : null}
 
         <section className="primary-layout">
-          {activeAppTab !== 'photo_gallery'
-            ? renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)
-            : null}
+          {renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)}
 
           {activeAppTab === 'trip_overview' ? (
             <>
@@ -1767,13 +1659,27 @@ export function App() {
               <section className="dashboard-grid secondary-grid single-column">
                 <article className="card">
                   <h2>Gallery View</h2>
-                  {photoScope === 'selected_day' ? (
-                    <p className="hint">
-                      Using top-of-screen filter: {formatDateLabel(selectedDate)} ({selectedDay.region}).
-                    </p>
-                  ) : (
-                    <p className="hint">Using top-of-screen filter: full-trip photo set.</p>
-                  )}
+                  <div className="toggle-row top-photo-scope" role="group" aria-label="Gallery media scope">
+                    <button
+                      type="button"
+                      className={photoScope === 'selected_day' ? 'active' : ''}
+                      onClick={() => setPhotoScope('selected_day')}
+                    >
+                      Selected Day ({selectedDayPhotoRows.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={photoScope === 'full_trip' ? 'active' : ''}
+                      onClick={() => setPhotoScope('full_trip')}
+                    >
+                      Full Trip ({fullTripPhotoRows.length})
+                    </button>
+                  </div>
+                  <p className="hint">
+                    {photoScope === 'selected_day'
+                      ? `Showing media for ${formatDateLabel(selectedDate)} (${selectedDay.region}).`
+                      : 'Showing media across the full trip.'}
+                  </p>
                 </article>
 
                 {renderActualMomentsCard('', galleryPhotoRows)}

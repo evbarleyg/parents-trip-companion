@@ -37,6 +37,38 @@ npm run typecheck
 npm run build
 ```
 
+## Guardrails (Recommended Workflow)
+
+Use this when working across multiple branches so you do not miss new commits from `origin/main`.
+
+```bash
+cd /Users/evanbarley-greenfield/Downloads/untitled\ folder/parents-trip-companion
+npm run guardrails:install-hooks   # one-time: installs pre-push checks
+git switch -c codex/<task-name> origin/main
+npm run guardrails:sync            # fetch + rebase on origin/main + full checks
+```
+
+Before opening a PR or pushing a follow-up commit:
+
+```bash
+cd /Users/evanbarley-greenfield/Downloads/untitled\ folder/parents-trip-companion
+npm run guardrails:check
+git push -u origin codex/<task-name>
+```
+
+Available scripts:
+
+- `npm run guardrails:sync` fetches latest `origin/main`, rebases your branch if needed, then runs lint/typecheck/tests/build.
+- `npm run guardrails:check` verifies you are not behind `origin/main` and runs lint/typecheck/tests/build.
+- `npm run guardrails:prepush` runs lint/typecheck/tests (used by the pre-push hook).
+- `npm run guardrails:install-hooks` installs `.githooks/pre-push` and points git to that hooks path.
+
+Notes:
+
+- Guardrails intentionally block `main` by default so day-to-day work happens on `codex/*` branches.
+- If you truly need an emergency `main` fix, you can override once with `ALLOW_MAIN=1 npm run guardrails:check`.
+- If you are temporarily offline, run `SKIP_FETCH=1 npm run guardrails:check` to validate against your locally cached `origin/main`.
+
 ## Environment Variables
 
 ### Web (`web/.env`)
