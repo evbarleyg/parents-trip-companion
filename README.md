@@ -7,7 +7,7 @@ Standalone family travel companion app for the itinerary window **February 3, 20
 - No manual lock screen; frontend auto-initializes a local session and attempts backend auto-unlock
 - Document upload + review-before-merge flow (`PDF`, `DOCX`, `DOC`, `TXT`)
 - Today-first dashboard with map, location scoring, live recommendations, and chat
-- Day-level "Actual Moments" cards enriched from the `B-G-M Fam` iMessage export (text snippets + photos)
+- Day-level "Actual Moments" cards enriched from the `B-G-M Fam` iMessage export (text snippets + photos + videos)
 - Dad content enrichment workflow for raw text + photo drops (review-gated publishing)
 
 ## Architecture

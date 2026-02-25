@@ -48,6 +48,7 @@ import type {
   CapabilitiesResponse,
   TripActualMoment,
   TripActualPhoto,
+  TripActualVideo,
   MapStatus,
   MobilePanel,
   SourceDocument,
@@ -148,6 +149,10 @@ function shouldRemovePhotoByMarker(photo: { src: string; alt: string; caption: s
   return REMOVED_PHOTO_FILE_MARKERS.some((marker) => search.includes(marker));
 }
 
+function hasMomentMedia(moment: TripActualMoment): boolean {
+  return moment.photos.length > 0 || (moment.videos?.length ?? 0) > 0;
+}
+
 function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripActualMoment[] {
   if (!moments || moments.length === 0) return [];
 
@@ -155,9 +160,10 @@ function sanitizeActualMoments(moments: TripActualMoment[] | undefined): TripAct
     .map((moment) => ({
       ...moment,
       photos: dedupePhotos(moment.photos.filter((photo) => !shouldRemovePhotoByMarker(photo))),
+      videos: dedupeVideos(moment.videos || []),
     }))
     .filter((moment) => {
-      if (moment.photos.length > 0) return true;
+      if (hasMomentMedia(moment)) return true;
       const searchable = `${moment.text} ${moment.whenLabel} ${moment.source}`.toLowerCase();
       return !REMOVED_PHOTO_FILE_MARKERS.some((marker) => searchable.includes(marker));
     });
@@ -172,6 +178,20 @@ function dedupePhotos(photos: TripActualPhoto[]): TripActualPhoto[] {
     if (!key || seen.has(key)) continue;
     seen.add(key);
     deduped.push(photo);
+  }
+
+  return deduped;
+}
+
+function dedupeVideos(videos: TripActualVideo[]): TripActualVideo[] {
+  const seen = new Set<string>();
+  const deduped: TripActualVideo[] = [];
+
+  for (const video of videos) {
+    const key = video.src ? video.src.trim().toLowerCase() : video.id || '';
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(video);
   }
 
   return deduped;
@@ -195,6 +215,7 @@ function mergeActualMoments(
       ...existing,
       ...moment,
       photos: dedupePhotos([...existing.photos, ...moment.photos]),
+      videos: dedupeVideos([...(existing.videos || []), ...(moment.videos || [])]),
     });
   }
 
@@ -473,7 +494,7 @@ export function App() {
     [selectedDate, selectedActualMoments],
   );
   const selectedDayPhotoRows = useMemo(
-    () => selectedActualMomentRows.filter((row) => row.moment.photos.length > 0),
+    () => selectedActualMomentRows.filter((row) => hasMomentMedia(row.moment)),
     [selectedActualMomentRows],
   );
   const selectedDateMs = useMemo(() => parseTripDateMs(selectedDate), [selectedDate]);
@@ -486,7 +507,7 @@ export function App() {
       tripPlan.days
         .flatMap((day) =>
           (day.actualMoments || [])
-            .filter((moment) => moment.photos.length > 0)
+            .filter((moment) => hasMomentMedia(moment))
             .map((moment) => ({ date: day.date, moment })),
         )
       .sort((a, b) => b.date.localeCompare(a.date)),
@@ -1298,10 +1319,10 @@ export function App() {
   ) {
     return (
       <article className={`card ${className}`.trim()}>
-        <h2>Family Photos</h2>
+        <h2>Family Photos & Videos</h2>
         <p className="hint">Pulled from the B-G-M Fam iMessage export and matched to trip moments.</p>
         {showRecentFallback && rows.length > 0 ? (
-          <p className="hint">No photos for this day. Showing recent photos from nearby trip days.</p>
+          <p className="hint">No media for this day. Showing recent photos/videos from nearby trip days.</p>
         ) : null}
         {rows.length === 0 ? (
           <p className="hint">No extracted moments saved yet.</p>
@@ -1315,19 +1336,32 @@ export function App() {
                 {row.date !== selectedDate ? <span className="pill">{formatDateLabel(row.date)}</span> : null}
               </div>
                 <p>{row.moment.text}</p>
-                {row.moment.photos.length > 0 ? (
-                    <div className="actual-photo-grid">
+                {hasMomentMedia(row.moment) ? (
+                  <div className="actual-photo-grid">
                     {row.moment.photos.map((photo) => (
-                    <figure key={photo.id} className="actual-photo-card">
-                      <img
-                        src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
-                        alt={photo.alt}
-                        loading="lazy"
-                      />
-                      <figcaption>{photo.caption}</figcaption>
+                      <figure key={photo.id} className="actual-photo-card">
+                        <img
+                          src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
+                          alt={photo.alt}
+                          loading="lazy"
+                        />
+                        <figcaption>{photo.caption}</figcaption>
                       </figure>
                     ))}
-                    </div>
+                    {(row.moment.videos || []).map((video) => (
+                      <figure key={video.id} className="actual-photo-card">
+                        <video
+                          controls
+                          preload="metadata"
+                          playsInline
+                          poster={video.poster ? resolvePublicAssetUrl(video.poster, import.meta.env.BASE_URL) : undefined}
+                        >
+                          <source src={resolvePublicAssetUrl(video.src, import.meta.env.BASE_URL)} />
+                        </video>
+                        <figcaption>{video.caption}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
                 ) : null}
             </li>
           ))}
@@ -1456,7 +1490,7 @@ export function App() {
         <div className="top-photo-header">
           <div>
             <h2>Trip Photos</h2>
-            <p className="hint">Quickly scan photos and jump to that day.</p>
+            <p className="hint">Quickly scan photos/videos and jump to that day.</p>
           </div>
           <div className="toggle-row top-photo-scope">
             <button
@@ -1478,8 +1512,8 @@ export function App() {
         {topPhotoItems.length === 0 ? (
           <p className="hint">
             {photoScope === 'selected_day'
-              ? `No photos mapped for ${formatDateLabel(selectedDate)}.`
-              : 'No photos are currently mapped.'}
+              ? `No media mapped for ${formatDateLabel(selectedDate)}.`
+              : 'No photos/videos are currently mapped.'}
           </p>
         ) : (
           <ul className="top-photo-strip">

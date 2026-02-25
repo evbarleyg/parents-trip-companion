@@ -83,6 +83,7 @@ function cloneMoment(moment: TripActualMoment): TripActualMoment {
   return {
     ...moment,
     photos: moment.photos.map((photo) => ({ ...photo })),
+    videos: (moment.videos || []).map((video) => ({ ...video })),
   };
 }
 

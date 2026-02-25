@@ -25,12 +25,20 @@ export interface TripActualPhoto {
   caption: string;
 }
 
+export interface TripActualVideo {
+  id: string;
+  src: string;
+  caption: string;
+  poster?: string;
+}
+
 export interface TripActualMoment {
   id: string;
   source: string;
   whenLabel: string;
   text: string;
   photos: TripActualPhoto[];
+  videos?: TripActualVideo[];
 }
 
 export interface TripDay {

@@ -1,7 +1,7 @@
 import type { TripActualMoment } from '../types';
 
 const DAD_TEXT_SOURCE = 'Dad updates (B-G-M Fam thread)';
-const DAD_PHOTO_SOURCE = 'Dad photo dump (EXIF date + itinerary geocode fallback)';
+const DAD_PHOTO_SOURCE = 'Dad media dump (EXIF date + itinerary geocode fallback)';
 
 interface DayGeo {
   region: string;
@@ -114,6 +114,10 @@ const DAD_PHOTO_META: Record<string, { capturedAt: string; originalName: string 
   'dad-2026-02-19-img-1304.jpeg': { capturedAt: '2026:02:19 16:10:40', originalName: 'IMG_1304.jpeg' },
 };
 
+const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string; poster?: string }> = {};
+
+const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {};
+
 const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
   '2026-02-05': [
     'dad-2026-02-05-79198991565-244df404-a1ce-4c62-8ffa-605a7db358d0.jpeg',
@@ -170,13 +174,14 @@ function buildTextMoments(date: string): TripActualMoment[] {
 
 function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
   const geo = GEO_BY_DATE[date];
+  const videos = DAD_VIDEOS_BY_DATE[date] || [];
   return {
-    id: `dad-photos-${date}`,
+    id: `dad-media-${date}`,
     source: DAD_PHOTO_SOURCE,
-    whenLabel: `${date} - EXIF photo set`,
+    whenLabel: `${date} - EXIF media set`,
     text: geo
-      ? `Photos were dated from EXIF creation metadata. GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
-      : 'Photos were dated from EXIF creation metadata. GPS tags were missing in the shared export.',
+      ? `Media were dated from EXIF creation metadata. GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
+      : 'Media were dated from EXIF creation metadata. GPS tags were missing in the shared export.',
     photos: fileNames.map((fileName, index) => {
       const meta = DAD_PHOTO_META[fileName];
       const geoLabel = geo ? ` in ${geo.region}` : '';
@@ -188,18 +193,34 @@ function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
         caption: `${meta.originalName} | EXIF ${meta.capturedAt}${geoCaption}`,
       };
     }),
+    videos: videos.map((fileName, index) => {
+      const meta = DAD_VIDEO_META[fileName] || { originalName: fileName };
+      const geoCaption = geo ? ` | inferred map anchor: ${formatGeo(geo)}` : '';
+      const captured = meta.capturedAt ? ` | EXIF ${meta.capturedAt}` : '';
+      return {
+        id: `dad-video-${date}-${index + 1}`,
+        src: `/actuals/${fileName}`,
+        caption: `${meta.originalName}${captured}${geoCaption}`,
+        poster: meta.poster,
+      };
+    }),
   };
 }
 
 function buildMomentsByDate(): Record<string, TripActualMoment[]> {
-  const dates = new Set<string>([...Object.keys(DAD_TEXT_UPDATES), ...Object.keys(DAD_PHOTOS_BY_DATE)]);
+  const dates = new Set<string>([
+    ...Object.keys(DAD_TEXT_UPDATES),
+    ...Object.keys(DAD_PHOTOS_BY_DATE),
+    ...Object.keys(DAD_VIDEOS_BY_DATE),
+  ]);
   const out: Record<string, TripActualMoment[]> = {};
 
   for (const date of [...dates].sort()) {
     const textMoments = buildTextMoments(date);
     const photos = DAD_PHOTOS_BY_DATE[date] || [];
-    const photoMoment = photos.length > 0 ? [buildPhotoMoment(date, photos)] : [];
-    out[date] = textMoments.concat(photoMoment);
+    const videos = DAD_VIDEOS_BY_DATE[date] || [];
+    const mediaMoment = photos.length > 0 || videos.length > 0 ? [buildPhotoMoment(date, photos)] : [];
+    out[date] = textMoments.concat(mediaMoment);
   }
 
   return out;

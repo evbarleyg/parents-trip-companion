@@ -8,6 +8,7 @@ function cloneDay(day: TripDay): TripDay {
     actualMoments: day.actualMoments?.map((moment) => ({
       ...moment,
       photos: moment.photos.map((photo) => ({ ...photo })),
+      videos: (moment.videos || []).map((video) => ({ ...video })),
     })),
   };
 }

@@ -802,7 +802,8 @@ a:focus-visible {
   background: #ffffff;
 }
 
-.actual-photo-card img {
+.actual-photo-card img,
+.actual-photo-card video {
   width: 100%;
   height: 220px;
   display: block;

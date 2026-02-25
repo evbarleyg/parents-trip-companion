@@ -15,7 +15,7 @@ function makeDay(overrides: Partial<TripDay> = {}): TripDay {
 }
 
 describe('day helper functions', () => {
-  test('detects days with at least one photo', () => {
+  test('detects days with at least one media item', () => {
     const withPhotos = makeDay({
       actualMoments: [
         {
@@ -46,7 +46,7 @@ describe('day helper functions', () => {
     expect(dayPhotoCount(withoutPhotos)).toBe(0);
   });
 
-  test('builds option labels with TODAY and PHOTOS markers', () => {
+  test('builds option labels with TODAY and MEDIA markers', () => {
     const day = makeDay({
       date: '2026-02-13',
       actualMoments: [
@@ -61,7 +61,7 @@ describe('day helper functions', () => {
     });
 
     expect(dayOptionLabel(day, '2026-02-13')).toContain('TODAY');
-    expect(dayOptionLabel(day, '2026-02-13')).toContain('PHOTOS');
+    expect(dayOptionLabel(day, '2026-02-13')).toContain('MEDIA');
     expect(dayOptionLabel(day, '2026-02-12')).toContain('Fri, Feb 13');
   });
 });

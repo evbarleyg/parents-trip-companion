@@ -4,6 +4,7 @@ This project supports manual enrichment from dad's raw updates:
 
 - freeform text updates in `updates.txt`
 - a photo dump in `photos/`
+- optional video clips in `videos/`
 
 Use one folder per drop:
 
@@ -11,6 +12,7 @@ Use one folder per drop:
 content/dad-inbox/<batch-id>/
   updates.txt
   photos/
+  videos/
 ```
 
 Recommended batch IDs:
@@ -48,6 +50,24 @@ Uncertain items are tracked in `docs/dad-content-review.md` and excluded from da
 - Move approved photos into `web/public/actuals/`
 - Use stable slug names: `dad-<date>-<topic>.png`
 - Provide meaningful `alt` and `caption` for every published photo
+
+## Video Handling
+
+- Supported formats: `mp4`, `mov`, `m4v`, `webm` (prefer `mp4` for browser compatibility)
+- Import raw videos from an external folder with:
+
+```bash
+python scripts/import_dad_videos.py \
+  --source /path/on/local-server/videos \
+  --batch 2026-02-25-dad-drop-03
+```
+
+- Add `--recursive` when source videos are nested
+- Add `--dry-run` first to validate what will import
+- Move approved videos into `web/public/actuals/`
+- Use stable slug names: `dad-<date>-<topic>.mp4`
+- Add a concise caption for each published video
+- Optional: include a poster image (`.jpg`/`.png`) for faster gallery rendering
 
 ## Publish Checklist
 
