@@ -148,7 +148,7 @@ const DAD_PHOTO_META: Record<string, { capturedAt: string; originalName: string 
 
 const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string; poster?: string }> = {
   'dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4': {
-    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    capturedAt: '2026-02-21 (Telegram import, user-confirmed second Muscat leg)',
     originalName: 'file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4',
   },
   'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4': {
@@ -162,7 +162,7 @@ const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string
 };
 
 const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {
-  '2026-02-14': ['dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4'],
+  '2026-02-21': ['dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4'],
   '2026-02-24': [
     'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4',
     'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4',
