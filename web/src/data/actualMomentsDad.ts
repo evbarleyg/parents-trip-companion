@@ -152,18 +152,18 @@ const DAD_VIDEO_META: Record<string, { capturedAt?: string; originalName: string
     originalName: 'file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4',
   },
   'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4': {
-    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    capturedAt: '2026-02-24 (Telegram import, user-confirmed Maldives)',
     originalName: 'file_41---4dcb984a-42d2-4eeb-b60c-98fcca52c70f.mp4',
   },
   'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4': {
-    capturedAt: '2026-02-14 (Telegram import, EXIF unavailable)',
+    capturedAt: '2026-02-24 (Telegram import, user-confirmed Maldives)',
     originalName: 'file_42---1ab8b829-74ae-4c5a-80b7-da2de19b8e35.mp4',
   },
 };
 
 const DAD_VIDEOS_BY_DATE: Record<string, string[]> = {
-  '2026-02-14': [
-    'dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4',
+  '2026-02-14': ['dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4'],
+  '2026-02-24': [
     'dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4',
     'dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4',
   ],
