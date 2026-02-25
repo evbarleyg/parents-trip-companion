@@ -1,0 +1,20 @@
+{
+  "batch": "2026-02-25-dad-drop-telegram",
+  "source": "telegram-attachment",
+  "destination": "/home/node/.openclaw/workspace/Projects/parents-trip-companion/content/dad-inbox/2026-02-25-dad-drop-telegram/videos",
+  "files": [
+    {
+      "name": "file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4",
+      "bytes": 1198630
+    },
+    {
+      "name": "file_41---4dcb984a-42d2-4eeb-b60c-98fcca52c70f.mp4",
+      "bytes": 2399843
+    },
+    {
+      "name": "file_42---1ab8b829-74ae-4c5a-80b7-da2de19b8e35.mp4",
+      "bytes": 1869054
+    }
+  ],
+  "timestamp_utc": "2026-02-25T04:41:24.743142+00:00"
+}

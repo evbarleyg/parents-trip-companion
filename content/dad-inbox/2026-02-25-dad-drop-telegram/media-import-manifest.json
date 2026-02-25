@@ -1,0 +1,105 @@
+{
+  "batch": "2026-02-25-dad-drop-telegram",
+  "source": "telegram-attachments",
+  "photos": [
+    {
+      "name": "file_44---660691e2-ddac-4a8f-9050-e59fd2b67484.jpg",
+      "bytes": 323723
+    },
+    {
+      "name": "file_45---3b1c98b6-96a6-4302-8d61-78c72940985a.jpg",
+      "bytes": 340491
+    },
+    {
+      "name": "file_46---abddaa69-a99c-448f-b4de-b509223c6a28.jpg",
+      "bytes": 357679
+    },
+    {
+      "name": "file_47---01232145-ba7d-43b0-85fe-122d96de9630.jpg",
+      "bytes": 156605
+    },
+    {
+      "name": "file_48---6f264e53-4106-464a-8828-f3ee2abc6b14.jpg",
+      "bytes": 97121
+    },
+    {
+      "name": "file_49---fbf9027a-80db-470e-95eb-b74721073007.jpg",
+      "bytes": 178247
+    },
+    {
+      "name": "file_50---4b5b90a6-e523-42ee-81ea-0bda597e95e1.jpg",
+      "bytes": 133817
+    },
+    {
+      "name": "file_51---70b1ef40-9e4d-4583-95b1-f61d657ddbbc.jpg",
+      "bytes": 374092
+    }
+  ],
+  "videos": [
+    {
+      "name": "file_40---cbbea19d-b9fc-48e3-961c-b619543980b4.mp4",
+      "bytes": 1198630
+    },
+    {
+      "name": "file_41---4dcb984a-42d2-4eeb-b60c-98fcca52c70f.mp4",
+      "bytes": 2399843
+    },
+    {
+      "name": "file_42---1ab8b829-74ae-4c5a-80b7-da2de19b8e35.mp4",
+      "bytes": 1869054
+    }
+  ],
+  "last_import_report": [
+    {
+      "file": "file_44---33c4770c-39cf-4995-b772-0ec5246213ac.jpg",
+      "status": "duplicate_skipped",
+      "sha256": "b336f10c117379c7f46ddd462033c988ecf88884cacd20699b68f754800840f9",
+      "matches": [
+        "/home/node/.openclaw/workspace/Projects/parents-trip-companion/content/dad-inbox/2026-02-25-dad-drop-telegram/photos/file_44---660691e2-ddac-4a8f-9050-e59fd2b67484.jpg"
+      ]
+    },
+    {
+      "file": "file_45---3b1c98b6-96a6-4302-8d61-78c72940985a.jpg",
+      "status": "imported",
+      "sha256": "f0a2b3a876d2dffe8145c62f1a396ba1ccce76968d3d63f8dd24afae03d19966",
+      "bytes": 340491
+    },
+    {
+      "file": "file_46---abddaa69-a99c-448f-b4de-b509223c6a28.jpg",
+      "status": "imported",
+      "sha256": "3e53b84c374044e1e5e4a834752f42076f68409acad2cb1a258445c138622e0e",
+      "bytes": 357679
+    },
+    {
+      "file": "file_47---01232145-ba7d-43b0-85fe-122d96de9630.jpg",
+      "status": "imported",
+      "sha256": "e61e852069fea33b378d1f6a015234908686446f690a621501713d24630a8688",
+      "bytes": 156605
+    },
+    {
+      "file": "file_48---6f264e53-4106-464a-8828-f3ee2abc6b14.jpg",
+      "status": "imported",
+      "sha256": "46839f03de4afbfa1137887cc3005815b158a272f2b855afdd51da83ca92d7f9",
+      "bytes": 97121
+    },
+    {
+      "file": "file_49---fbf9027a-80db-470e-95eb-b74721073007.jpg",
+      "status": "imported",
+      "sha256": "358b12fe6674695acce229b8fba200c76d06fe503b3ca2fdcc7196e6b9108974",
+      "bytes": 178247
+    },
+    {
+      "file": "file_50---4b5b90a6-e523-42ee-81ea-0bda597e95e1.jpg",
+      "status": "imported",
+      "sha256": "42dc6aa8889cf14c385cf8b5257fc5d4ab61adba64db2746e7a378d1994540a2",
+      "bytes": 133817
+    },
+    {
+      "file": "file_51---70b1ef40-9e4d-4583-95b1-f61d657ddbbc.jpg",
+      "status": "imported",
+      "sha256": "995e7313ecdb025105d89ba3157a99d0809987da18c3cecbbca273dd69778ca4",
+      "bytes": 374092
+    }
+  ],
+  "timestamp_utc": "2026-02-25T04:44:11.083665+00:00"
+}
