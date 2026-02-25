@@ -40,10 +40,25 @@ describe('day helper functions', () => {
       ],
     });
 
+    const withVideos = makeDay({
+      actualMoments: [
+        {
+          id: 'm4',
+          source: 'iMessage',
+          whenLabel: 'Night',
+          text: 'Walkthrough clip',
+          photos: [],
+          videos: [{ id: 'v1', src: '/clip.mp4', caption: 'Night market clip' }],
+        },
+      ],
+    });
+
     expect(dayHasPhotos(withPhotos)).toBe(true);
     expect(dayHasPhotos(withoutPhotos)).toBe(false);
+    expect(dayHasPhotos(withVideos)).toBe(true);
     expect(dayPhotoCount(withPhotos)).toBe(1);
     expect(dayPhotoCount(withoutPhotos)).toBe(0);
+    expect(dayPhotoCount(withVideos)).toBe(1);
   });
 
   test('builds option labels with TODAY and MEDIA markers', () => {

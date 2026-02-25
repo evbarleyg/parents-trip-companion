@@ -10,7 +10,7 @@ import { DAD_ACTUAL_MOMENTS_BY_DATE, DAD_ITINERARY_TEXT_UPDATE_DATES } from './a
 const DATA_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_PUBLIC_DIR = path.resolve(DATA_DIR, '../../public');
 
-function resolvePhotoPath(src: string): string {
+function resolveAssetPath(src: string): string {
   const relative = src.startsWith('/') ? src.slice(1) : src;
   return path.resolve(WEB_PUBLIC_DIR, relative);
 }
@@ -48,6 +48,7 @@ describe('actual moments seed data', () => {
     const allMoments = getAllSeedActualMoments();
     const momentIds = new Set<string>();
     const photoIds = new Set<string>();
+    const videoIds = new Set<string>();
 
     for (const moment of allMoments) {
       expect(momentIds.has(moment.id)).toBe(false);
@@ -57,28 +58,55 @@ describe('actual moments seed data', () => {
         expect(photoIds.has(photo.id)).toBe(false);
         photoIds.add(photo.id);
       }
+
+      for (const video of moment.videos || []) {
+        expect(videoIds.has(video.id)).toBe(false);
+        videoIds.add(video.id);
+      }
     }
   });
 
   it('does not publish duplicate photo src entries across seeded moments', () => {
     const allMoments = getAllSeedActualMoments();
     const photoSrcs = new Set<string>();
+    const videoSrcs = new Set<string>();
 
     for (const moment of allMoments) {
       for (const photo of moment.photos) {
         expect(photoSrcs.has(photo.src)).toBe(false);
         photoSrcs.add(photo.src);
       }
+
+      for (const video of moment.videos || []) {
+        expect(videoSrcs.has(video.src)).toBe(false);
+        videoSrcs.add(video.src);
+      }
     }
   });
 
-  it('references only photo files that exist under web/public', () => {
+  it('references only media files that exist under web/public', () => {
     const allMoments = getAllSeedActualMoments();
     for (const moment of allMoments) {
       for (const photo of moment.photos) {
-        expect(existsSync(resolvePhotoPath(photo.src))).toBe(true);
+        expect(existsSync(resolveAssetPath(photo.src))).toBe(true);
+      }
+      for (const video of moment.videos || []) {
+        expect(existsSync(resolveAssetPath(video.src))).toBe(true);
       }
     }
+  });
+
+  it('maps dad telegram videos to the expected trip dates', () => {
+    const muscatVideos = getActualMomentsForDate('2026-02-21')
+      .flatMap((moment) => moment.videos || [])
+      .map((video) => video.src);
+    const maldivesVideos = getActualMomentsForDate('2026-02-24')
+      .flatMap((moment) => moment.videos || [])
+      .map((video) => video.src);
+
+    expect(muscatVideos).toContain('/actuals/dad-2026-02-14-muscat-grand-mosque-walkthrough-01.mp4');
+    expect(maldivesVideos).toContain('/actuals/dad-2026-02-14-muscat-grand-mosque-walkthrough-02.mp4');
+    expect(maldivesVideos).toContain('/actuals/dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4');
   });
 
   it('returns cloned data so callers cannot mutate seed state', () => {

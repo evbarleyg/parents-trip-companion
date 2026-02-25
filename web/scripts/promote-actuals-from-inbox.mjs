@@ -1,18 +1,30 @@
 #!/usr/bin/env node
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ACTUALS_DIR = path.join(ROOT, 'public', 'actuals');
 const INBOX_DIR = path.join(ACTUALS_DIR, 'inbox');
 const PLAN_PATH = path.join(INBOX_DIR, 'promotion-manifest.json');
 const OUT_MANIFEST_TS = path.join(ROOT, 'src', 'data', 'actualPhotoManifest.ts');
 
-const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.webm']);
+const ALLOWED_EXTENSIONS = new Set([...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS]);
 const SCREENSHOT_PATTERN = /(screenshot|screen[\s_-]?shot|screen[\s_-]?record)/i;
 
 function fail(message) {
   throw new Error(message);
+}
+
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function assertSafeFilename(filename, context) {
@@ -30,10 +42,69 @@ function assertSafeFilename(filename, context) {
 
 function toManifestContent(filenames) {
   const rows = filenames.map((name) => `  '${name}',`).join('\n');
-  return `export const VERIFIED_ACTUAL_PHOTO_FILENAMES = [\n${rows}\n] as const;\n\nexport const VERIFIED_ACTUAL_PHOTO_SRCS = VERIFIED_ACTUAL_PHOTO_FILENAMES.map(\n  (filename) => \`/actuals/\${filename}\`,\n);\n\nconst VERIFIED_ACTUAL_PHOTO_SRC_SET = new Set<string>(VERIFIED_ACTUAL_PHOTO_SRCS);\n\nexport function isVerifiedActualPhotoSrc(src: string): boolean {\n  return VERIFIED_ACTUAL_PHOTO_SRC_SET.has(src);\n}\n`;
+  const imageExtensions = [...IMAGE_EXTENSIONS].map((extension) => `'${extension}'`).join(', ');
+  const videoExtensions = [...VIDEO_EXTENSIONS].map((extension) => `'${extension}'`).join(', ');
+
+  return `const IMAGE_EXTENSIONS = new Set<string>([${imageExtensions}]);
+const VIDEO_EXTENSIONS = new Set<string>([${videoExtensions}]);
+
+function normalizeSrc(src: string): string {
+  return src.trim().toLowerCase().split('?')[0].split('#')[0];
+}
+
+function extensionFromFilename(filename: string): string {
+  const dotIndex = filename.lastIndexOf('.');
+  if (dotIndex < 0) return '';
+  return filename.slice(dotIndex).toLowerCase();
+}
+
+function srcToFilename(src: string): string {
+  const normalized = normalizeSrc(src);
+  if (!normalized.startsWith('/actuals/')) return '';
+  return normalized.slice('/actuals/'.length);
+}
+
+export const VERIFIED_ACTUAL_MEDIA_FILENAMES = [
+${rows}
+] as const;
+
+export const VERIFIED_ACTUAL_MEDIA_SRCS = VERIFIED_ACTUAL_MEDIA_FILENAMES.map(
+  (filename) => \`/actuals/\${filename}\`,
+);
+
+const VERIFIED_ACTUAL_MEDIA_SRC_SET = new Set<string>(VERIFIED_ACTUAL_MEDIA_SRCS.map((src) => src.toLowerCase()));
+
+export function isVerifiedActualMediaSrc(src: string): boolean {
+  return VERIFIED_ACTUAL_MEDIA_SRC_SET.has(normalizeSrc(src));
+}
+
+export const VERIFIED_ACTUAL_PHOTO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>
+  IMAGE_EXTENSIONS.has(extensionFromFilename(filename)),
+);
+export const VERIFIED_ACTUAL_PHOTO_SRCS = VERIFIED_ACTUAL_PHOTO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);
+
+export const VERIFIED_ACTUAL_VIDEO_FILENAMES = VERIFIED_ACTUAL_MEDIA_FILENAMES.filter((filename) =>
+  VIDEO_EXTENSIONS.has(extensionFromFilename(filename)),
+);
+export const VERIFIED_ACTUAL_VIDEO_SRCS = VERIFIED_ACTUAL_VIDEO_FILENAMES.map((filename) => \`/actuals/\${filename}\`);
+
+export function isVerifiedActualPhotoSrc(src: string): boolean {
+  const filename = srcToFilename(src);
+  return IMAGE_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);
+}
+
+export function isVerifiedActualVideoSrc(src: string): boolean {
+  const filename = srcToFilename(src);
+  return VIDEO_EXTENSIONS.has(extensionFromFilename(filename)) && isVerifiedActualMediaSrc(src);
+}
+`;
 }
 
 async function run() {
+  if (!(await fileExists(PLAN_PATH))) {
+    fail(`Missing promotion manifest: ${PLAN_PATH}`);
+  }
+
   const planRaw = await fs.readFile(PLAN_PATH, 'utf8');
   const plan = JSON.parse(planRaw);
   const promotions = Array.isArray(plan.promotions) ? plan.promotions : [];
@@ -45,17 +116,31 @@ async function run() {
     assertSafeFilename(promotion.inboxFilename, `${context}.inboxFilename`);
     assertSafeFilename(promotion.targetFilename, `${context}.targetFilename`);
 
-    for (const field of ['photoId', 'date', 'momentId', 'alt', 'caption', 'attribution']) {
+    for (const field of ['date', 'momentId', 'alt', 'caption', 'attribution']) {
       if (typeof promotion[field] !== 'string' || promotion[field].trim().length < 3) {
         fail(`${context}.${field} is required`);
       }
+    }
+    const mediaId = promotion.photoId || promotion.videoId || promotion.mediaId;
+    if (typeof mediaId !== 'string' || mediaId.trim().length < 3) {
+      fail(`${context}.photoId|videoId|mediaId is required`);
     }
 
     const sourcePath = path.join(INBOX_DIR, promotion.inboxFilename);
     const targetPath = path.join(ACTUALS_DIR, promotion.targetFilename);
 
-    await fs.access(sourcePath);
-    await fs.copyFile(sourcePath, targetPath);
+    if (await fileExists(sourcePath)) {
+      await fs.copyFile(sourcePath, targetPath);
+      continue;
+    }
+
+    if (!(await fileExists(targetPath))) {
+      fail(`${context}: missing source file ${promotion.inboxFilename} and target file ${promotion.targetFilename}`);
+    }
+
+    console.warn(
+      `${context}: source file ${promotion.inboxFilename} is missing in inbox; kept existing target ${promotion.targetFilename}.`,
+    );
   }
 
   const entries = await fs.readdir(ACTUALS_DIR, { withFileTypes: true });
