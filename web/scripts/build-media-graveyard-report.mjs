@@ -116,6 +116,14 @@ async function run() {
   ]);
 
   const includedHashSet = new Set(referencedHashes.map((row) => row.hash));
+  const actualHashMap = new Map();
+  for (const row of actualRows) {
+    const hashed = await hashFile(row.file);
+    const list = actualHashMap.get(hashed) || [];
+    list.push(row);
+    actualHashMap.set(hashed, list);
+  }
+
   const graveyardInboxRows = inboxHashes
     .filter((row) => !includedHashSet.has(row.hash))
     .sort((a, b) => a.file.localeCompare(b.file));
@@ -164,6 +172,36 @@ async function run() {
   lines.push(`- Inbox files not represented by included media hashes (graveyard in inbox): ${graveyardInboxRows.length}`);
   lines.push(`- Exact duplicate hash groups across actuals+inbox: ${exactDuplicateGroups.length}`);
   lines.push(`- Same-name non-hash variant groups: ${stemConflictGroups.length}`);
+  lines.push('');
+
+  lines.push('## Reasoned Index');
+  lines.push('');
+  lines.push('| File | Reason | Related |');
+  lines.push('| --- | --- | --- |');
+
+  if (unreferencedActualRows.length === 0 && graveyardInboxRows.length === 0) {
+    lines.push('| none | none | none |');
+  } else {
+    for (const row of unreferencedActualRows) {
+      const hash = await hashFile(row.file);
+      const relatedInbox = inboxHashes
+        .filter((entry) => entry.hash === hash)
+        .map((entry) => `\`${rel(entry.file)}\``)
+        .slice(0, 3);
+      const relatedValue = relatedInbox.length > 0 ? relatedInbox.join(', ') : 'none';
+      lines.push(`| \`${rel(row.file)}\` | Not referenced by seeded data under \`web/src/data\`. | ${relatedValue} |`);
+    }
+
+    for (const row of graveyardInboxRows) {
+      const matchingActuals = (actualHashMap.get(row.hash) || []).map((entry) => entry.file);
+      if (matchingActuals.length > 0) {
+        const related = matchingActuals.map((file) => `\`${rel(file)}\``).slice(0, 3).join(', ');
+        lines.push(`| \`${rel(row.file)}\` | Duplicate of media already copied into \`web/public/actuals\`, but that target file is currently unreferenced in seeded data. | ${related} |`);
+      } else {
+        lines.push(`| \`${rel(row.file)}\` | Not represented by any included media hash; pending triage. | none |`);
+      }
+    }
+  }
   lines.push('');
 
   lines.push('## Graveyard In Actuals (Unreferenced)');
