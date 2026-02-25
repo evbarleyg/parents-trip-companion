@@ -1486,58 +1486,60 @@ export function App() {
         {statusMessage}
       </p>
 
-      <section className="top-photo-shell card" aria-label="Quick photo rail">
-        <div className="top-photo-header">
-          <div>
-            <h2>Trip Photos</h2>
-            <p className="hint">Quickly scan photos/videos and jump to that day.</p>
+      {activeAppTab === 'photo_gallery' ? (
+        <section className="top-photo-shell card" aria-label="Quick photo rail">
+          <div className="top-photo-header">
+            <div>
+              <h2>Trip Photos</h2>
+              <p className="hint">Quickly scan photos/videos and jump to that day.</p>
+            </div>
+            <div className="toggle-row top-photo-scope">
+              <button
+                type="button"
+                className={photoScope === 'selected_day' ? 'active' : ''}
+                onClick={() => setPhotoScope('selected_day')}
+              >
+                Selected Day ({selectedDayTopPhotoItems.length})
+              </button>
+              <button
+                type="button"
+                className={photoScope === 'full_trip' ? 'active' : ''}
+                onClick={() => setPhotoScope('full_trip')}
+              >
+                Full Trip ({fullTripTopPhotoItems.length})
+              </button>
+            </div>
           </div>
-          <div className="toggle-row top-photo-scope">
-            <button
-              type="button"
-              className={photoScope === 'selected_day' ? 'active' : ''}
-              onClick={() => setPhotoScope('selected_day')}
-            >
-              Selected Day ({selectedDayTopPhotoItems.length})
-            </button>
-            <button
-              type="button"
-              className={photoScope === 'full_trip' ? 'active' : ''}
-              onClick={() => setPhotoScope('full_trip')}
-            >
-              Full Trip ({fullTripTopPhotoItems.length})
-            </button>
-          </div>
-        </div>
-        {topPhotoItems.length === 0 ? (
-          <p className="hint">
-            {photoScope === 'selected_day'
-              ? `No media mapped for ${formatDateLabel(selectedDate)}.`
-              : 'No photos/videos are currently mapped.'}
-          </p>
-        ) : (
-          <ul className="top-photo-strip">
-            {topPhotoItems.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={`top-photo-item ${item.date === selectedDate ? 'is-selected' : ''}`}
-                  onClick={() => jumpToPhotoDate(item.date)}
-                  title={`${formatDateLabel(item.date)} - ${item.whenLabel}`}
-                >
-                  <img
-                    src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
-                    alt={item.alt}
-                    loading="lazy"
-                  />
-                  <span className="top-photo-item-date">{formatDateLabel(item.date)}</span>
-                  <span className="top-photo-item-caption">{item.caption}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          {topPhotoItems.length === 0 ? (
+            <p className="hint">
+              {photoScope === 'selected_day'
+                ? `No media mapped for ${formatDateLabel(selectedDate)}.`
+                : 'No photos/videos are currently mapped.'}
+            </p>
+          ) : (
+            <ul className="top-photo-strip">
+              {topPhotoItems.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className={`top-photo-item ${item.date === selectedDate ? 'is-selected' : ''}`}
+                    onClick={() => jumpToPhotoDate(item.date)}
+                    title={`${formatDateLabel(item.date)} - ${item.whenLabel}`}
+                  >
+                    <img
+                      src={resolvePublicAssetUrl(canonicalPhotoSrc(item.src), import.meta.env.BASE_URL)}
+                      alt={item.alt}
+                      loading="lazy"
+                    />
+                    <span className="top-photo-item-date">{formatDateLabel(item.date)}</span>
+                    <span className="top-photo-item-caption">{item.caption}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       <section className="title-toolbar" aria-label="Trip controls">
         <nav className="toolbar-tabs" aria-label="Primary view tabs">
