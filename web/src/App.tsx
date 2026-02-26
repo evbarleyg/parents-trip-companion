@@ -447,6 +447,13 @@ export function App() {
   const itemOptionsForManual = manualDay ? [...manualDay.summaryItems, ...manualDay.detailItems] : [];
   const extractEnabled = runtimeCapabilities.features.extract;
   const dayModeLabel = selectedDay.activeView === 'detail' ? 'Detailed Plan' : 'Trip Summary';
+  const locateButtonLabel = isMobile
+    ? autoLocateEnabled
+      ? 'Pause Locate'
+      : 'Locate'
+    : autoLocateEnabled
+      ? 'Pause Auto Locate'
+      : 'Locate + Auto Refresh';
   const selectedActualMoments = selectedDay.actualMoments || [];
   const selectedDayAnnotations = useMemo<DayAnnotationRow[]>(
     () =>
@@ -1272,12 +1279,12 @@ export function App() {
     return (
       <article className={`card ${className}`.trim()}>
         <h2>Family Photos & Videos</h2>
-        <p className="hint">Pulled from the B-G-M Fam iMessage export and matched to trip moments.</p>
+        <p className="hint">From the B-G-M family thread.</p>
         {showRecentFallback && rows.length > 0 ? (
-          <p className="hint">No media for this day. Showing recent photos/videos from nearby trip days.</p>
+          <p className="hint">No day media yet. Showing nearby day media.</p>
         ) : null}
         {rows.length === 0 ? (
-          <p className="hint">No extracted moments saved yet.</p>
+          <p className="hint">No media yet.</p>
         ) : (
           <ul className="actual-moment-list">
           {rows.map((row) => (
@@ -1412,7 +1419,7 @@ export function App() {
             type="button"
             onClick={() => setAutoLocateEnabled((prev) => !prev)}
           >
-            {autoLocateEnabled ? 'Pause Auto Locate' : 'Locate + Auto Refresh'}
+            {locateButtonLabel}
           </button>
         </div>
       </header>
@@ -1495,7 +1502,7 @@ export function App() {
           <details className={`toolbar-popover runtime ${runtimeCapabilities.mode}`}>
             <summary>{runtimeCapabilities.mode === 'live' ? 'Live mode' : 'Fallback mode'}</summary>
             <div className="toolbar-popover-body">
-              <p>Uploads: {extractEnabled ? 'on' : 'off'}. Chat and tips are limited in fallback.</p>
+              <p>Uploads: {extractEnabled ? 'on' : 'off'}.</p>
             </div>
           </details>
 
@@ -1544,7 +1551,7 @@ export function App() {
               <section className="trip-overview-grid">
                 <article className="card">
                   <h2>Trip Timeline</h2>
-                  <p>Jump by date or region. The map stays on your full plan.</p>
+                  <p>Jump by date or region.</p>
                   <div className="row">
                     <label htmlFor="overview-day-select">Date jump</label>
                     <select
@@ -1651,8 +1658,8 @@ export function App() {
                   </div>
                   <p className="hint">
                     {photoScope === 'selected_day'
-                      ? `Showing media for ${formatDateLabel(selectedDate)} (${selectedDay.region}).`
-                      : 'Showing media across the full trip.'}
+                      ? `${formatDateLabel(selectedDate)} (${selectedDay.region}).`
+                      : 'All trip media.'}
                   </p>
                 </article>
 
@@ -1689,7 +1696,7 @@ export function App() {
                       <h3>Family Updates</h3>
                       <span className="day-annotations-count">{selectedDayAnnotations.length}</span>
                     </div>
-                    <p className="day-annotations-subtitle">Highlighted notes from family-thread updates.</p>
+                    <p className="day-annotations-subtitle">Family thread notes.</p>
                     {selectedDayAnnotations.length > 0 ? (
                       <ul className="day-annotation-list">
                         {selectedDayAnnotations.map((annotation) => (
@@ -1704,7 +1711,7 @@ export function App() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="day-annotations-empty">No family updates logged for {formatDateLabel(selectedDate)}.</p>
+                      <p className="day-annotations-empty">No updates for {formatDateLabel(selectedDate)}.</p>
                     )}
                   </section>
                   <ol className="timeline-list">
