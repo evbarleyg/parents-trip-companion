@@ -142,6 +142,11 @@ function mapScopeStopLimit(scope: MapScope): number {
   return scope === 'trip' ? 20 : 12;
 }
 
+function shouldUseCanvasRenderer(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  return !/jsdom/i.test(navigator.userAgent || '');
+}
+
 function annotationTagFromSource(source: string): string {
   const normalized = source.toLowerCase();
   if (normalized.includes('dad updates')) return 'Dad note';
@@ -805,7 +810,8 @@ export function App() {
       try {
         const map = L.map(container, {
           zoomControl: true,
-          preferCanvas: true,
+          // JSDOM test runs cannot provide a full canvas context for Leaflet vector layers.
+          preferCanvas: shouldUseCanvasRenderer(),
         }).setView([26, 20], 3);
 
         const roadBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
