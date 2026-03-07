@@ -112,6 +112,20 @@ describe('actual moments seed data', () => {
     expect(marchFiveMoment?.photos.some((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(true);
   });
 
+  it('treats the later March 7 waterfront image as Lisbon, not Istanbul', () => {
+    const marchSevenMoment = getActualMomentsForDate('2026-03-07').find(
+      (entry) => entry.id === 'actual-2026-03-07-photo-library',
+    );
+    const lisbonPhoto = marchSevenMoment?.photos.find((photo) => photo.caption.toLowerCase().includes('lisbon'));
+
+    expect(marchSevenMoment?.whenLabel).toContain('Lisbon arrival');
+    expect(marchSevenMoment?.text.toLowerCase()).toContain('lisbon waterfront view');
+    expect(lisbonPhoto?.alt).toContain('Lisbon');
+    expect(lisbonPhoto?.caption).toContain('Lisbon');
+    expect(lisbonPhoto?.lat).toBeCloseTo(38.707889, 5);
+    expect(lisbonPhoto?.lng).toBeCloseTo(-9.136592, 5);
+  });
+
   it('maps the Istanbul travelogue across March 2 through March 6', () => {
     const expectedByDate = {
       '2026-03-02': ['actual-2026-03-02-mom-istanbul-cihangir', 'galataport'],
