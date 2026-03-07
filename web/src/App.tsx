@@ -118,6 +118,25 @@ interface DayAnnotationRow {
 type PhotoScope = 'selected_day' | 'full_trip';
 
 const REMOVED_PHOTO_FILE_MARKERS = ['img_4017.jpeg', 'img_4024.jpeg', 'img_4041.jpeg'];
+const MACHINE_MEDIA_TEXT_PATTERNS = [
+  /\bimg[_-]\d+/i,
+  /\bexif\b/i,
+  /uuid=/i,
+  /\bfile[_-]\d+/i,
+  /\bcode=\d+\b/i,
+  /\blibrary=\d+\b/i,
+  /\bmode=\d+\b/i,
+  /&loc=true/i,
+  /&cap=true/i,
+  /converted from heic/i,
+  /\.(heic|jpeg|jpg|png|mov|mp4)\b/i,
+];
+const GENERIC_MEDIA_TEXT_PATTERNS = [
+  /\bcaptured during the trip\.?$/i,
+  /^dad trip photo\b/i,
+  /^trip photo\b/i,
+  /^trip video\b/i,
+];
 const PHOTO_SRC_CANONICAL_ALIASES: Record<string, string> = {
   '/actuals/img-1126-2.jpeg': '/actuals/img-1126.jpeg',
 };
@@ -130,6 +149,10 @@ function normalizePhotoSrc(src: string): string {
 function canonicalPhotoSrc(src: string): string {
   const normalized = src.trim().toLowerCase();
   return PHOTO_SRC_CANONICAL_ALIASES[normalized] || src;
+}
+
+function normalizeVideoSrc(src: string): string {
+  return src.trim().toLowerCase();
 }
 
 function shouldRemovePhotoByMarker(photo: { src: string; alt: string; caption: string }): boolean {
@@ -202,7 +225,166 @@ function dedupeVideos(videos: TripActualVideo[]): TripActualVideo[] {
   return deduped;
 }
 
-function mergeActualMoments(
+function mergePhoto(existing: TripActualPhoto, incoming: TripActualPhoto): TripActualPhoto {
+  return {
+    ...existing,
+    ...incoming,
+    src: incoming.src || existing.src,
+    alt: incoming.alt || existing.alt,
+    caption: incoming.caption || existing.caption,
+    lat: incoming.lat ?? existing.lat,
+    lng: incoming.lng ?? existing.lng,
+  };
+}
+
+function mergePhotos(existingPhotos: TripActualPhoto[], incomingPhotos: TripActualPhoto[]): TripActualPhoto[] {
+  const byKey = new Map<string, TripActualPhoto>();
+
+  for (const photo of existingPhotos) {
+    const key = photo.src ? normalizePhotoSrc(photo.src) : photo.id || '';
+    if (!key) continue;
+    byKey.set(key, { ...photo });
+  }
+
+  for (const photo of incomingPhotos) {
+    const key = photo.src ? normalizePhotoSrc(photo.src) : photo.id || '';
+    if (!key) continue;
+
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? mergePhoto(existing, photo) : { ...photo });
+  }
+
+  return [...byKey.values()];
+}
+
+function mergeVideo(existing: TripActualVideo, incoming: TripActualVideo): TripActualVideo {
+  return {
+    ...existing,
+    ...incoming,
+    src: incoming.src || existing.src,
+    caption: incoming.caption || existing.caption,
+    poster: incoming.poster || existing.poster,
+  };
+}
+
+function mergeVideos(existingVideos: TripActualVideo[], incomingVideos: TripActualVideo[]): TripActualVideo[] {
+  const byKey = new Map<string, TripActualVideo>();
+
+  for (const video of existingVideos) {
+    const key = video.src ? normalizeVideoSrc(video.src) : video.id || '';
+    if (!key) continue;
+    byKey.set(key, { ...video });
+  }
+
+  for (const video of incomingVideos) {
+    const key = video.src ? normalizeVideoSrc(video.src) : video.id || '';
+    if (!key) continue;
+
+    const existing = byKey.get(key);
+    byKey.set(key, existing ? mergeVideo(existing, video) : { ...video });
+  }
+
+  return [...byKey.values()];
+}
+
+function looksMachineGeneratedMediaText(value: string | undefined): boolean {
+  const text = value?.trim();
+  if (!text) return false;
+  return MACHINE_MEDIA_TEXT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function isMeaningfulMediaText(value: string | undefined): value is string {
+  const text = value?.trim();
+  if (!text) return false;
+  if (looksMachineGeneratedMediaText(text)) return false;
+  return !GENERIC_MEDIA_TEXT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function mediaDisplayCaption(caption: string | undefined, alt: string | undefined): string | null {
+  if (isMeaningfulMediaText(caption)) return caption.trim();
+  if (isMeaningfulMediaText(alt)) return alt.trim();
+  return null;
+}
+
+function mergeSourceDocuments(restoredSources: SourceDocument[], seedSources: SourceDocument[]): SourceDocument[] {
+  const merged = new Map<string, SourceDocument>();
+
+  for (const source of seedSources) {
+    merged.set(source.id, { ...source });
+  }
+
+  for (const source of restoredSources) {
+    const existing = merged.get(source.id);
+    merged.set(source.id, existing ? { ...existing, ...source } : { ...source });
+  }
+
+  return [...merged.values()].sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt));
+}
+
+function mergeHydratedItem(restored: ItineraryItem, seed: ItineraryItem): ItineraryItem {
+  const restoredNotes = restored.notes?.trim() || '';
+  const seedNotes = seed.notes?.trim() || '';
+
+  return {
+    ...restored,
+    ...seed,
+    title: seed.title || restored.title,
+    startTime: seed.startTime || restored.startTime,
+    endTime: seed.endTime ?? restored.endTime,
+    location: seed.location || restored.location,
+    notes: seedNotes.length >= restoredNotes.length ? seedNotes || restoredNotes : restoredNotes,
+    category: seed.category || restored.category,
+    lat: seed.lat ?? restored.lat,
+    lng: seed.lng ?? restored.lng,
+  };
+}
+
+function mergeHydratedItems(restoredItems: ItineraryItem[], seedItems: ItineraryItem[]): ItineraryItem[] {
+  const merged = new Map<string, ItineraryItem>();
+
+  for (const item of seedItems) {
+    merged.set(item.id, { ...item });
+  }
+
+  for (const item of restoredItems) {
+    const existing = item.id ? merged.get(item.id) : undefined;
+    if (!existing) {
+      merged.set(item.id, { ...item });
+      continue;
+    }
+
+    merged.set(item.id, mergeHydratedItem(item, existing));
+  }
+
+  return [...merged.values()].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+}
+
+function hydrateDayWithSeed(restoredDay: TripDay | undefined, seedDay: TripDay | undefined): TripDay | undefined {
+  if (!seedDay) return restoredDay;
+  if (!restoredDay) {
+    return {
+      ...seedDay,
+      summaryItems: seedDay.summaryItems.map((item) => ({ ...item })),
+      detailItems: seedDay.detailItems.map((item) => ({ ...item })),
+      actualMoments: mergeActualMoments(undefined, seedDay.actualMoments),
+    };
+  }
+
+  const summaryItems = mergeHydratedItems(restoredDay.summaryItems, seedDay.summaryItems);
+  const detailItems = mergeHydratedItems(restoredDay.detailItems, seedDay.detailItems);
+
+  return {
+    ...restoredDay,
+    ...seedDay,
+    region: seedDay.region || restoredDay.region,
+    summaryItems,
+    detailItems,
+    activeView: restoredDay.activeView || seedDay.activeView,
+    actualMoments: mergeActualMoments(restoredDay.actualMoments, seedDay.actualMoments),
+  };
+}
+
+export function mergeActualMoments(
   restoredMoments: TripActualMoment[] | undefined,
   seedMoments: TripActualMoment[] | undefined,
 ): TripActualMoment[] {
@@ -219,8 +401,8 @@ function mergeActualMoments(
     mergedById.set(moment.id, {
       ...existing,
       ...moment,
-      photos: dedupePhotos([...existing.photos, ...moment.photos]),
-      videos: dedupeVideos([...(existing.videos || []), ...(moment.videos || [])]),
+      photos: mergePhotos(existing.photos, moment.photos),
+      videos: mergeVideos(existing.videos || [], moment.videos || []),
     });
   }
 
@@ -303,22 +485,22 @@ function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode
   };
 }
 
-function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
+export function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
+  const restoredDaysByDate = new Map(plan.days.map((day) => [day.date, day]));
   const seedDaysByDate = new Map(seed.days.map((day) => [day.date, day]));
+  const allDates = [...new Set([...seed.days.map((day) => day.date), ...plan.days.map((day) => day.date)])].sort();
 
   return {
+    ...seed,
     ...plan,
     tripName: seed.tripName,
     startDate: seed.startDate,
     endDate: seed.endDate,
     timezone: plan.timezone || seed.timezone,
-    days: plan.days.map((day) => {
-      const seedDay = seedDaysByDate.get(day.date);
-      return {
-        ...day,
-        actualMoments: mergeActualMoments(day.actualMoments, seedDay?.actualMoments),
-      };
-    }),
+    sources: mergeSourceDocuments(plan.sources, seed.sources),
+    days: allDates
+      .map((date) => hydrateDayWithSeed(restoredDaysByDate.get(date), seedDaysByDate.get(date)))
+      .filter((day): day is TripDay => Boolean(day)),
   };
 }
 
@@ -529,6 +711,8 @@ export function App() {
     () => (photoScope === 'selected_day' ? selectedDayPhotoRows : fullTripPhotoRows),
     [fullTripPhotoRows, photoScope, selectedDayPhotoRows],
   );
+  const shouldRenderMapFirst = activeAppTab === 'trip_overview';
+  const primaryMapClass = `primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`.trim();
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (activeMapScope === 'day') {
@@ -1355,29 +1539,37 @@ export function App() {
                 <p>{row.moment.text}</p>
                 {hasMomentMedia(row.moment) ? (
                   <div className="actual-photo-grid">
-                    {row.moment.photos.map((photo) => (
-                      <figure key={photo.id} className="actual-photo-card">
-                        <img
-                          src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
-                          alt={photo.alt}
-                          loading="lazy"
-                        />
-                        <figcaption>{photo.caption}</figcaption>
-                      </figure>
-                    ))}
-                    {(row.moment.videos || []).map((video) => (
-                      <figure key={video.id} className="actual-photo-card">
-                        <video
-                          controls
-                          preload="metadata"
-                          playsInline
-                          poster={video.poster ? resolvePublicAssetUrl(video.poster, import.meta.env.BASE_URL) : undefined}
-                        >
-                          <source src={resolvePublicAssetUrl(video.src, import.meta.env.BASE_URL)} />
-                        </video>
-                        <figcaption>{video.caption}</figcaption>
-                      </figure>
-                    ))}
+                    {row.moment.photos.map((photo) => {
+                      const displayCaption = mediaDisplayCaption(photo.caption, photo.alt);
+
+                      return (
+                        <figure key={photo.id} className="actual-photo-card">
+                          <img
+                            src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
+                            alt={photo.alt}
+                            loading="lazy"
+                          />
+                          {displayCaption ? <figcaption>{displayCaption}</figcaption> : null}
+                        </figure>
+                      );
+                    })}
+                    {(row.moment.videos || []).map((video) => {
+                      const displayCaption = mediaDisplayCaption(video.caption, undefined);
+
+                      return (
+                        <figure key={video.id} className="actual-photo-card">
+                          <video
+                            controls
+                            preload="metadata"
+                            playsInline
+                            poster={video.poster ? resolvePublicAssetUrl(video.poster, import.meta.env.BASE_URL) : undefined}
+                          >
+                            <source src={resolvePublicAssetUrl(video.src, import.meta.env.BASE_URL)} />
+                          </video>
+                          {displayCaption ? <figcaption>{displayCaption}</figcaption> : null}
+                        </figure>
+                      );
+                    })}
                   </div>
                 ) : null}
             </li>
@@ -1603,7 +1795,7 @@ export function App() {
         ) : null}
 
         <section className="primary-layout">
-          {renderMapCard(`primary-map ${activeAppTab === 'day_detail' ? panelHiddenClass('map') : ''}`)}
+          {shouldRenderMapFirst ? renderMapCard(primaryMapClass) : null}
 
           {activeAppTab === 'trip_overview' ? (
             <>
@@ -1798,6 +1990,8 @@ export function App() {
               </section>
             </>
           )}
+
+          {!shouldRenderMapFirst ? renderMapCard(primaryMapClass) : null}
         </section>
 
       </section>

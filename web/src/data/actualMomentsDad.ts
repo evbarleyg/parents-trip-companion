@@ -254,13 +254,13 @@ function dadMediaContext(date: string): string {
 }
 
 function dadPhotoCaption(date: string, index: number, total: number): string {
-  const count = total > 1 ? `photo ${index + 1} of ${total}` : 'photo';
-  return `Shared ${count} from the ${dadMediaContext(date)}.`;
+  const context = dadMediaContext(date);
+  return total > 1 ? `${context}, photo ${index + 1} of ${total}.` : `${context}.`;
 }
 
 function dadVideoCaption(date: string, index: number, total: number): string {
-  const count = total > 1 ? `video clip ${index + 1} of ${total}` : 'video clip';
-  return `Shared ${count} from the ${dadMediaContext(date)}.`;
+  const context = dadMediaContext(date);
+  return total > 1 ? `${context}, video ${index + 1} of ${total}.` : `${context}.`;
 }
 
 function buildTextMoments(date: string): TripActualMoment[] {
@@ -288,7 +288,10 @@ function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
       return {
         id: `dad-photo-${date}-${index + 1}`,
         src: `/actuals/${fileName}`,
-        alt: `Dad trip photo ${index + 1} from the ${dadMediaContext(date)}.`,
+        alt:
+          fileNames.length > 1
+            ? `${dadMediaContext(date)}, photo ${index + 1} of ${fileNames.length}.`
+            : `${dadMediaContext(date)} photo.`,
         caption: dadPhotoCaption(date, index, fileNames.length),
       };
     }),

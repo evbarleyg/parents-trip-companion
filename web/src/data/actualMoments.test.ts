@@ -16,6 +16,15 @@ function resolveAssetPath(src: string): string {
 }
 
 describe('actual moments seed data', () => {
+  const rawMediaCaptionPatterns = [
+    /\bIMG_[\w.-]*/i,
+    /\bEXIF\b/i,
+    /uuid=/i,
+    /\bfile_[\w-]*/i,
+    /\.(heic|jpeg|jpg|png|mov|mp4)\b/i,
+    /converted from HEIC/i,
+  ];
+
   it('returns known moments for Dubai day', () => {
     const moments = getActualMomentsForDate('2026-02-07');
     expect(moments.length).toBeGreaterThan(0);
@@ -199,6 +208,20 @@ describe('actual moments seed data', () => {
 
     expect(muscatFinaleMedia?.videos?.[0].caption).toContain('Muscat Grand Mosque finale');
     expect(muscatFinaleMedia?.videos?.[0].caption).not.toContain('file_');
+  });
+
+  it('keeps shipped media captions and alt text free of raw filename and EXIF strings', () => {
+    for (const moment of getAllSeedActualMoments()) {
+      for (const photo of moment.photos) {
+        for (const value of [photo.caption, photo.alt]) {
+          expect(rawMediaCaptionPatterns.some((pattern) => pattern.test(value))).toBe(false);
+        }
+      }
+
+      for (const video of moment.videos || []) {
+        expect(rawMediaCaptionPatterns.some((pattern) => pattern.test(video.caption))).toBe(false);
+      }
+    }
   });
 
   it('returns cloned data so callers cannot mutate seed state', () => {

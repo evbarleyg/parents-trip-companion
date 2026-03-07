@@ -2,7 +2,8 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { App } from './App';
+import { App, hydratePlanWithSeedData, mediaDisplayCaption } from './App';
+import { buildSeedTripPlan } from './data/seedTrip';
 
 vi.mock('./lib/api', () => ({
   getRuntimeCapabilities: vi.fn(async () => ({
@@ -48,6 +49,12 @@ function findButtonByText(container: HTMLElement, label: string): HTMLButtonElem
   ) as HTMLButtonElement | undefined;
 }
 
+function findHeadingByText(container: HTMLElement, label: string): HTMLHeadingElement | undefined {
+  return Array.from(container.querySelectorAll('h2')).find(
+    (heading) => heading.textContent?.trim() === label,
+  ) as HTMLHeadingElement | undefined;
+}
+
 describe('App media layout regression', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -91,7 +98,12 @@ describe('App media layout regression', () => {
     const mapHeadings = Array.from(container.querySelectorAll('h2')).filter(
       (heading) => heading.textContent?.trim() === 'Map',
     );
+    const tripMediaHeading = findHeadingByText(container, 'Trip Media');
+    const mapHeading = findHeadingByText(container, 'Map');
 
+    expect(tripMediaHeading).toBeTruthy();
+    expect(mapHeading).toBeTruthy();
+    expect(tripMediaHeading?.compareDocumentPosition(mapHeading!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(mapHeadings.length).toBeGreaterThan(0);
     expect(container.textContent).toContain('Route Overview');
     expect(container.textContent).not.toContain('Map:');
@@ -110,6 +122,12 @@ describe('App media layout regression', () => {
       await flushEffects();
     });
 
+    const tripMediaHeading = findHeadingByText(container, 'Trip Media');
+    const mapHeading = findHeadingByText(container, 'Map');
+
+    expect(tripMediaHeading).toBeTruthy();
+    expect(mapHeading).toBeTruthy();
+    expect(tripMediaHeading?.compareDocumentPosition(mapHeading!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(container.textContent).toContain('Trip Updates');
     expect(container.textContent).not.toContain('Dad Updates');
   });
@@ -174,5 +192,54 @@ describe('App mobile walkthrough', () => {
     expect(container.textContent).toContain('Route Overview');
     expect(container.textContent).not.toContain('Road');
     expect(container.textContent).not.toContain('Satellite + Roads');
+  });
+});
+
+describe('App helper regression', () => {
+  it('prefers shipped seed day/media metadata over stale local cache data', () => {
+    const stalePlan = buildSeedTripPlan();
+    const feb11 = stalePlan.days.find((day) => day.date === '2026-02-11');
+    const march5Library = stalePlan.days
+      .find((day) => day.date === '2026-03-05')
+      ?.actualMoments?.find((moment) => moment.id === 'actual-2026-03-05-photo-library');
+
+    if (feb11) {
+      feb11.region = 'Oman - Salalah';
+      feb11.summaryItems[0].title = 'Stale Dubai/Oman cache';
+      feb11.summaryItems[0].location = 'Salalah, Oman';
+      feb11.detailItems = [];
+    }
+
+    if (march5Library?.photos[1]) {
+      march5Library.photos[1].alt = 'Istanbul photo from March 5, 2026 captured during the trip.';
+      march5Library.photos[1].caption = 'IMG_1437.heic | EXIF 2026:03:05 07:23:01 | converted from HEIC';
+    }
+
+    const hydrated = hydratePlanWithSeedData(stalePlan, buildSeedTripPlan());
+    const hydratedFeb11 = hydrated.days.find((day) => day.date === '2026-02-11');
+    const hydratedMarch5 = hydrated.days
+      .find((day) => day.date === '2026-03-05')
+      ?.actualMoments?.find((moment) => moment.id === 'actual-2026-03-05-photo-library');
+
+    expect(hydratedFeb11?.region).toBe('Dubai -> Oman - Salalah');
+    expect(hydratedFeb11?.detailItems.map((item) => item.title)).toContain(
+      'Shindagha Museum and cultural understanding lunch',
+    );
+    expect(hydratedMarch5?.photos[1].caption).toBe('Another sunrise view with the red sky reflecting on the water.');
+  });
+
+  it('uses only meaningful media captions in the UI', () => {
+    expect(
+      mediaDisplayCaption('IMG_1437.heic | EXIF 2026:03:05 07:23:01 | converted from HEIC', 'Night view up to Galata Tower.'),
+    ).toBe('Night view up to Galata Tower.');
+    expect(
+      mediaDisplayCaption(
+        'IMG_1437.heic | EXIF 2026:03:05 07:23:01 | converted from HEIC',
+        'Istanbul photo from March 5, 2026 captured during the trip.',
+      ),
+    ).toBeNull();
+    expect(mediaDisplayCaption('Fiery sunrise over the Bosporus and city rooftops from the hotel.', undefined)).toBe(
+      'Fiery sunrise over the Bosporus and city rooftops from the hotel.',
+    );
   });
 });
