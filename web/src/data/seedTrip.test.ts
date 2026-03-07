@@ -5,7 +5,9 @@ describe('seed trip Dubai/Oman enrichment', () => {
   it('adds the guide-company Dubai culture day before the Salalah flight', () => {
     const day = buildSeedTripPlan().days.find((entry) => entry.date === '2026-02-11');
 
+    expect(day?.region).toBe('Dubai -> Oman - Salalah');
     expect(day?.summaryItems[0].title).toContain('cultural lunch');
+    expect(day?.summaryItems[0].location).toContain('Old Dubai');
     expect(day?.detailItems.map((item) => item.title)).toEqual(
       expect.arrayContaining([
         'Shindagha Museum and cultural understanding lunch',

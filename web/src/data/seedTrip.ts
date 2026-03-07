@@ -113,12 +113,12 @@ const DAY_SEEDS: Record<string, DaySeed> = {
     lng: 55.3323,
   },
   '2026-02-11': {
-    region: 'Oman - Salalah',
-    summary: 'Shindagha Museum, cultural lunch, souqs, and flight to Salalah',
-    location: 'Dubai to Salalah',
+    region: 'Dubai -> Oman - Salalah',
+    summary: 'Old Dubai museums, cultural lunch, souqs, and flight to Salalah',
+    location: 'Old Dubai / Salalah arrival',
     category: 'rest',
-    lat: 17.0151,
-    lng: 54.0924,
+    lat: 25.2672,
+    lng: 55.2974,
   },
   '2026-02-12': {
     region: 'Oman - Salalah',

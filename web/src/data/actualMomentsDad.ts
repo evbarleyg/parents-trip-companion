@@ -35,6 +35,21 @@ const GEO_BY_DATE: Record<string, DayGeo> = {
   '2026-02-21': { region: 'Oman - Muscat', lat: 23.588, lng: 58.3829 },
 };
 
+const DAD_MEDIA_CONTEXT_BY_DATE: Record<string, string> = {
+  '2026-02-05': 'Dubai Creek evening walk',
+  '2026-02-07': 'Dubai waterfront and Downtown sightseeing day',
+  '2026-02-09': 'Abu Dhabi and desert transition day',
+  '2026-02-10': 'Al Maha morning and return to Dubai group-hotel day',
+  '2026-02-12': 'Salalah arrival, Al Baleed, and Sumhuram day',
+  '2026-02-13': 'Dhofar mountains safari',
+  '2026-02-14': 'Old Muscat arrival day',
+  '2026-02-15': 'Daymaniyat snorkel and Muscat coastline day',
+  '2026-02-18': 'Jebel Akhdar cooking-class and village-walk day',
+  '2026-02-19': 'Jabreen, Bahla, and Misfah heritage day',
+  '2026-02-21': 'Muscat Grand Mosque finale',
+  '2026-02-24': 'shared media received during the Maldives segment',
+};
+
 const DAD_TEXT_UPDATES: Record<string, Array<{ id: string; whenLabel: string; text: string }>> = {
   '2026-02-07': [
     {
@@ -223,6 +238,31 @@ function formatGeo(geo: DayGeo): string {
   return `${geo.region} (${geo.lat.toFixed(4)}, ${geo.lng.toFixed(4)})`;
 }
 
+function formatDadWhenLabel(date: string): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  const label = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(value);
+  return `${label} - Dad media set`;
+}
+
+function dadMediaContext(date: string): string {
+  return DAD_MEDIA_CONTEXT_BY_DATE[date] || (GEO_BY_DATE[date] ? `${GEO_BY_DATE[date].region} day` : 'trip media day');
+}
+
+function dadPhotoCaption(date: string, index: number, total: number): string {
+  const count = total > 1 ? `photo ${index + 1} of ${total}` : 'photo';
+  return `Shared ${count} from the ${dadMediaContext(date)}.`;
+}
+
+function dadVideoCaption(date: string, index: number, total: number): string {
+  const count = total > 1 ? `video clip ${index + 1} of ${total}` : 'video clip';
+  return `Shared ${count} from the ${dadMediaContext(date)}.`;
+}
+
 function buildTextMoments(date: string): TripActualMoment[] {
   const updates = DAD_TEXT_UPDATES[date] || [];
   return updates.map((update) => ({
@@ -240,29 +280,24 @@ function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
   return {
     id: `dad-media-${date}`,
     source: DAD_PHOTO_SOURCE,
-    whenLabel: `${date} - EXIF media set`,
+    whenLabel: formatDadWhenLabel(date),
     text: geo
       ? `Media were dated from EXIF creation metadata. GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
       : 'Media were dated from EXIF creation metadata. GPS tags were missing in the shared export.',
     photos: fileNames.map((fileName, index) => {
-      const meta = DAD_PHOTO_META[fileName];
-      const geoLabel = geo ? ` in ${geo.region}` : '';
-      const geoCaption = geo ? ` | inferred map anchor: ${formatGeo(geo)}` : '';
       return {
         id: `dad-photo-${date}-${index + 1}`,
         src: `/actuals/${fileName}`,
-        alt: `Dad travel photo ${meta.originalName}${geoLabel} on ${date}`,
-        caption: `${meta.originalName} | EXIF ${meta.capturedAt}${geoCaption}`,
+        alt: `Dad trip photo ${index + 1} from the ${dadMediaContext(date)}.`,
+        caption: dadPhotoCaption(date, index, fileNames.length),
       };
     }),
     videos: videos.map((fileName, index) => {
       const meta = DAD_VIDEO_META[fileName] || { originalName: fileName };
-      const geoCaption = geo ? ` | inferred map anchor: ${formatGeo(geo)}` : '';
-      const captured = meta.capturedAt ? ` | EXIF ${meta.capturedAt}` : '';
       return {
         id: `dad-video-${date}-${index + 1}`,
         src: `/actuals/${fileName}`,
-        caption: `${meta.originalName}${captured}${geoCaption}`,
+        caption: dadVideoCaption(date, index, videos.length),
         poster: meta.poster,
       };
     }),

@@ -47,6 +47,7 @@ import {
 import type {
   AppViewTab,
   CapabilitiesResponse,
+  ItineraryItem,
   TripActualMoment,
   TripActualPhoto,
   TripActualVideo,
@@ -95,6 +96,7 @@ interface MapStop {
   id: string;
   date: string;
   label: string;
+  location: string;
   region: string;
   lat: number;
   lng: number;
@@ -234,6 +236,10 @@ function regionColor(region: string): string {
   if (key.includes('morocco')) return '#7b5d28';
   if (key.includes('travel') || key.includes('transit')) return '#516178';
   return '#365e8d';
+}
+
+function mapMarkerPlace(day: TripDay, item: ItineraryItem | undefined): string {
+  return item?.location?.trim() || day.region;
 }
 
 function parseTripDateMs(date: string): number {
@@ -532,6 +538,7 @@ export function App() {
           id: item.id,
           date: selectedDay.date,
           label: item.title,
+          location: item.location,
           region: selectedDay.region,
           lat: item.lat as number,
           lng: item.lng as number,
@@ -548,6 +555,7 @@ export function App() {
           id: `${day.date}-${firstWithCoords.id}`,
           date: day.date,
           label: firstWithCoords.title,
+          location: firstWithCoords.location,
           region: day.region,
           lat: firstWithCoords.lat as number,
           lng: firstWithCoords.lng as number,
@@ -962,10 +970,10 @@ export function App() {
         });
 
         marker.bindPopup(
-          `<b>${formatDateLabel(day.date)}</b>${isTodayDate ? ' (Today)' : ''}${hasPhotos ? ' (Photos)' : ''}<br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<b>${formatDateLabel(day.date)}</b>${isTodayDate ? ' (Today)' : ''}${hasPhotos ? ' (Photos)' : ''}<br/>${mapMarkerPlace(day, items[idx])}<br/>${items[idx]?.title || 'Itinerary stop'}`,
         );
         marker.bindTooltip(
-          `<strong>${formatDateLabel(day.date)}${isTodayDate ? ' - Today' : ''}${hasPhotos ? ' - Photos' : ''}</strong><br/>${day.region}<br/>${items[idx]?.title || 'Itinerary stop'}`,
+          `<strong>${formatDateLabel(day.date)}${isTodayDate ? ' - Today' : ''}${hasPhotos ? ' - Photos' : ''}</strong><br/>${mapMarkerPlace(day, items[idx])}<br/>${items[idx]?.title || 'Itinerary stop'}`,
           {
             direction: 'top',
             sticky: true,
@@ -1435,7 +1443,8 @@ export function App() {
                   <div>
                     <strong>{stop.label}</strong>
                     <small>
-                      {formatDateLabel(stop.date)} - {stop.region}
+                      {formatDateLabel(stop.date)} - {stop.location}
+                      {stop.location !== stop.region ? ` (${stop.region})` : ''}
                       {stop.date === todayDate ? ' (Today)' : ''}
                       {photoDates.has(stop.date) ? ' (Photos)' : ''}
                     </small>

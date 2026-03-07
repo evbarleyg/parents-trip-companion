@@ -185,6 +185,22 @@ describe('actual moments seed data', () => {
     expect(maldivesVideos).toContain('/actuals/dad-2026-02-14-muscat-grand-mosque-walkthrough-03.mp4');
   });
 
+  it('keeps dad media captions human readable instead of exposing raw EXIF filenames', () => {
+    const salalahMedia = getActualMomentsForDate('2026-02-12').find((moment) =>
+      moment.source.toLowerCase().includes('dad media dump'),
+    );
+    const muscatFinaleMedia = getActualMomentsForDate('2026-02-21').find((moment) =>
+      moment.source.toLowerCase().includes('dad media dump'),
+    );
+
+    expect(salalahMedia?.photos[0].caption).toContain('Salalah arrival');
+    expect(salalahMedia?.photos[0].caption).not.toContain('IMG_');
+    expect(salalahMedia?.photos[0].caption).not.toContain('EXIF');
+
+    expect(muscatFinaleMedia?.videos?.[0].caption).toContain('Muscat Grand Mosque finale');
+    expect(muscatFinaleMedia?.videos?.[0].caption).not.toContain('file_');
+  });
+
   it('returns cloned data so callers cannot mutate seed state', () => {
     const first = getActualMomentsForDate('2026-02-12');
     const second = getActualMomentsForDate('2026-02-12');
