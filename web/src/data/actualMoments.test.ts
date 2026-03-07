@@ -58,6 +58,68 @@ describe('actual moments seed data', () => {
     );
   });
 
+  it('adds guide-company updates across the Dubai and Oman leg', () => {
+    const expectedByDate = {
+      '2026-02-11': ['actual-2026-02-11-guide-dubai-culture-day', 'cultural understanding'],
+      '2026-02-13': ['actual-2026-02-13-guide-dhofar-safari', 'bonelli'],
+      '2026-02-15': ['actual-2026-02-15-guide-snorkel-day', 'octopus'],
+      '2026-02-19': ['actual-2026-02-19-guide-inland-forts', 'jabreen'],
+      '2026-02-21': ['actual-2026-02-21-guide-grand-mosque-opera', 'opera house'],
+    } as const;
+
+    for (const [date, [id, keyword]] of Object.entries(expectedByDate)) {
+      const moment = getActualMomentsForDate(date).find((entry) => entry.id === id);
+      expect(moment?.source.toLowerCase()).toContain('guide updates');
+      expect(moment?.text.toLowerCase()).toContain(keyword);
+      expect(moment?.photos).toEqual([]);
+    }
+  });
+
+  it('imports the Maldives and Istanbul photo-library sets with GPS where available', () => {
+    const maldivesMoment = getActualMomentsForDate('2026-02-28').find(
+      (entry) => entry.id === 'actual-2026-02-28-photo-library',
+    );
+    const istanbulMoment = getActualMomentsForDate('2026-03-02').find(
+      (entry) => entry.id === 'actual-2026-03-02-photo-library',
+    );
+    const marchFiveMoment = getActualMomentsForDate('2026-03-05').find(
+      (entry) => entry.id === 'actual-2026-03-05-photo-library',
+    );
+
+    expect(maldivesMoment?.source.toLowerCase()).toContain('photo library export');
+    expect(maldivesMoment?.photos).toHaveLength(5);
+    expect(maldivesMoment?.photos.every((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(
+      true,
+    );
+
+    expect(istanbulMoment?.photos).toHaveLength(7);
+    expect(istanbulMoment?.photos.some((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(
+      true,
+    );
+
+    expect(marchFiveMoment?.text.toLowerCase()).toContain('re-rendered into web-safe jpegs');
+    expect(marchFiveMoment?.photos).toHaveLength(6);
+    expect(marchFiveMoment?.photos.some((photo) => photo.src.endsWith('.jpeg'))).toBe(true);
+    expect(marchFiveMoment?.photos.some((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(true);
+  });
+
+  it('maps the Istanbul travelogue across March 2 through March 6', () => {
+    const expectedByDate = {
+      '2026-03-02': ['actual-2026-03-02-mom-istanbul-cihangir', 'galataport'],
+      '2026-03-03': ['actual-2026-03-03-mom-istanbul-sultanahmet', 'sultanahmet'],
+      '2026-03-04': ['actual-2026-03-04-mom-istanbul-besiktas-uskudar', 'kuzguncuk'],
+      '2026-03-05': ['actual-2026-03-05-mom-istanbul-tarabya-dinner', 'tarabya'],
+      '2026-03-06': ['actual-2026-03-06-mom-istanbul-balat-fener', 'balat'],
+    } as const;
+
+    for (const [date, [id, keyword]] of Object.entries(expectedByDate)) {
+      const moment = getActualMomentsForDate(date).find((entry) => entry.id === id);
+      expect(moment?.source.toLowerCase()).toContain('mom updates');
+      expect(moment?.text.toLowerCase()).toContain(keyword);
+      expect(moment?.photos).toEqual([]);
+    }
+  });
+
   it('keeps moment and photo IDs unique across merged datasets', () => {
     const allMoments = getAllSeedActualMoments();
     const momentIds = new Set<string>();
@@ -126,7 +188,13 @@ describe('actual moments seed data', () => {
   it('returns cloned data so callers cannot mutate seed state', () => {
     const first = getActualMomentsForDate('2026-02-12');
     const second = getActualMomentsForDate('2026-02-12');
-    first[0].photos[0].caption = 'edited';
-    expect(second[0].photos[0].caption).not.toBe('edited');
+    const firstPhotoMoment = first.find((moment) => moment.photos.length > 0);
+    const secondPhotoMoment = second.find((moment) => moment.photos.length > 0);
+
+    expect(firstPhotoMoment).toBeTruthy();
+    expect(secondPhotoMoment).toBeTruthy();
+
+    firstPhotoMoment!.photos[0].caption = 'edited';
+    expect(secondPhotoMoment!.photos[0].caption).not.toBe('edited');
   });
 });

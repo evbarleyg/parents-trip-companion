@@ -23,6 +23,8 @@ export interface TripActualPhoto {
   src: string;
   alt: string;
   caption: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface TripActualVideo {

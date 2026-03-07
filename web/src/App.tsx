@@ -12,6 +12,7 @@ import { getTodayInTripRange } from './lib/date';
 import { dayHasPhotos, dayOptionLabel } from './lib/day';
 import { detectWhereAmI } from './lib/location';
 import { applyTripPatch } from './lib/merge';
+import { getActualPhotoMapPointsForDay, isPhotoPointNearItinerary } from './lib/media-map';
 import { ensureOpenSession } from './lib/session';
 import { trackEvent } from './lib/telemetry';
 import {
@@ -151,6 +152,7 @@ function annotationTagFromSource(source: string): string {
   const normalized = source.toLowerCase();
   if (normalized.includes('dad updates')) return 'Dad note';
   if (normalized.includes('mom updates')) return 'Mom note';
+  if (normalized.includes('guide updates')) return 'Guide note';
   return 'Family note';
 }
 
@@ -946,6 +948,9 @@ export function App() {
       const coords = items
         .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
         .map((item) => [item.lat as number, item.lng as number] as [number, number]);
+      const photoPoints = getActualPhotoMapPointsForDay(day);
+      const selectedDayPhotoPoints =
+        coords.length === 0 ? photoPoints : photoPoints.filter((point) => isPhotoPointNearItinerary(point, coords));
 
       coords.forEach((coord, idx) => {
         const marker = L.circleMarker(coord, {
@@ -983,6 +988,45 @@ export function App() {
           selectedDayCoords.push(coord);
         }
       });
+
+      photoPoints.forEach((point) => {
+        const photoMarker = L.circleMarker([point.lat, point.lng], {
+          radius: isSelectedDate ? 5 : isTodayDate ? 4.5 : 4,
+          color: '#ffffff',
+          weight: 1.5,
+          fillColor: '#d97706',
+          fillOpacity: isSelectedDate ? 0.95 : 0.82,
+        });
+
+        photoMarker.bindPopup(
+          `<b>${formatDateLabel(day.date)}</b> - Photo${isTodayDate ? ' (Today)' : ''}<br/>${day.region}<br/>${point.caption}`,
+        );
+        photoMarker.bindTooltip(
+          `<strong>${formatDateLabel(day.date)} - Photo</strong><br/>${point.whenLabel}`,
+          {
+            direction: 'top',
+            sticky: true,
+            opacity: 0.95,
+            className: 'map-tooltip',
+          },
+        );
+        photoMarker.on('click', () => {
+          setDateAndOpenDayDetail(day.date);
+        });
+
+        markerLayerRef.current?.addLayer(photoMarker);
+        bounds.extend([point.lat, point.lng]);
+        if (day.region === todayRegion) {
+          todayRegionBounds.extend([point.lat, point.lng]);
+        }
+      });
+
+      if (isSelectedDate) {
+        selectedDayPhotoPoints.forEach((point) => {
+          selectedDayBounds.extend([point.lat, point.lng]);
+          selectedDayCoords.push([point.lat, point.lng]);
+        });
+      }
 
       if (coords.length >= 2) {
         if (activeMapScope === 'trip') {
@@ -1284,8 +1328,8 @@ export function App() {
   ) {
     return (
       <article className={`card ${className}`.trim()}>
-        <h2>Family Photos & Videos</h2>
-        <p className="hint">From the B-G-M family thread.</p>
+        <h2>Trip Media</h2>
+        <p className="hint">From the family thread, photo library, and imported trip media.</p>
         {showRecentFallback && rows.length > 0 ? (
           <p className="hint">No day media yet. Showing nearby day media.</p>
         ) : null}
@@ -1696,13 +1740,13 @@ export function App() {
                   </div>
                   <section
                     className={`day-annotations ${selectedDayAnnotations.length === 0 ? 'is-empty' : ''}`}
-                    aria-label="Family updates"
+                    aria-label="Trip updates"
                   >
                     <div className="day-annotations-header">
-                      <h3>Family Updates</h3>
+                      <h3>Trip Updates</h3>
                       <span className="day-annotations-count">{selectedDayAnnotations.length}</span>
                     </div>
-                    <p className="day-annotations-subtitle">Family thread notes.</p>
+                    <p className="day-annotations-subtitle">Family thread and guide notes.</p>
                     {selectedDayAnnotations.length > 0 ? (
                       <ul className="day-annotation-list">
                         {selectedDayAnnotations.map((annotation) => (

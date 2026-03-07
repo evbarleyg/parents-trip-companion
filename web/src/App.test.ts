@@ -100,7 +100,7 @@ describe('App media layout regression', () => {
     expect(container.textContent).not.toContain('Quickly scan photos/videos and jump to that day.');
   });
 
-  it('shows family update notes in day details', async () => {
+  it('shows trip update notes in day details', async () => {
     const dayDetailsTab = findButtonByText(container, 'Day Details');
 
     expect(dayDetailsTab).toBeTruthy();
@@ -110,7 +110,7 @@ describe('App media layout regression', () => {
       await flushEffects();
     });
 
-    expect(container.textContent).toContain('Family Updates');
+    expect(container.textContent).toContain('Trip Updates');
     expect(container.textContent).not.toContain('Dad Updates');
   });
 });
