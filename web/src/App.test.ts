@@ -165,8 +165,7 @@ describe('App mobile walkthrough', () => {
 
   it('keeps primary navigation and mobile controls usable', async () => {
     expect(findButtonByText(container, 'Locate')).toBeTruthy();
-    expect(findButtonByText(container, 'Map')).toBeTruthy();
-    expect(findButtonByText(container, 'Plan')).toBeTruthy();
+    expect(container.textContent).toContain('Trip Media');
 
     const fullTripTab = Array.from(container.querySelectorAll('button')).find(
       (button) => button.classList.contains('app-tab') && button.textContent?.trim() === 'Full Trip',

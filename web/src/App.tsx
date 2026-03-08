@@ -864,9 +864,8 @@ export function App() {
     setStatusMessage(`Focused map on ${stop.label}.`);
   }
 
-  function panelHiddenClass(panel: MobilePanel): string {
-    if (!isMobile || activeAppTab !== 'day_detail') return '';
-    return activeMobilePanel === panel ? '' : 'panel-hidden-mobile';
+  function panelHiddenClass(_panel: MobilePanel): string {
+    return '';
   }
 
   useEffect(() => {
@@ -1793,20 +1792,6 @@ export function App() {
       </section>
 
       <section id="primary-content">
-        {activeAppTab === 'day_detail' && isMobile ? (
-          <nav className="mobile-panel-strip" aria-label="Mobile quick tabs">
-            {(['map', 'plan'] as MobilePanel[]).map((panel) => (
-              <button
-                key={panel}
-                type="button"
-                className={`mobile-panel-btn ${activeMobilePanel === panel ? 'active' : ''}`}
-                onClick={() => setMobilePanel(panel)}
-              >
-                {MOBILE_PANEL_LABEL[panel]}
-              </button>
-            ))}
-          </nav>
-        ) : null}
 
         <section className="primary-layout">
           {shouldRenderMapFirst ? renderMapCard(primaryMapClass) : null}
