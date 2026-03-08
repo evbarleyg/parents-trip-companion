@@ -1427,7 +1427,11 @@ export function App() {
     setWhereAmI({
       mode: 'manual',
       currentLatLng:
-        selectedItem && Number.isFinite(selectedItem.lat) && Number.isFinite(selectedItem.lng)
+        selectedItem &&
+        typeof selectedItem.lat === 'number' &&
+        Number.isFinite(selectedItem.lat) &&
+        typeof selectedItem.lng === 'number' &&
+        Number.isFinite(selectedItem.lng)
           ? [selectedItem.lat, selectedItem.lng]
           : null,
       activeDayId: day.date,

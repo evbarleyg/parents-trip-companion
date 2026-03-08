@@ -39,6 +39,7 @@ function timeScore(item: ItineraryItem, minuteOfDay: number): number {
 function distanceScore(item: ItineraryItem, coords: [number, number] | null): number {
   if (!coords) return 20;
   if (!Number.isFinite(coords[0]) || !Number.isFinite(coords[1])) return 20;
+  if (typeof item.lat !== 'number' || typeof item.lng !== 'number') return 15;
   if (!Number.isFinite(item.lat) || !Number.isFinite(item.lng)) return 15;
   const meters = haversineMeters(coords, [item.lat, item.lng]);
   if (meters < 400) return 40;
