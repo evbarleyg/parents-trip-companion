@@ -717,7 +717,7 @@ export function App() {
   const mapStops = useMemo<MapStop[]>(() => {
     if (activeMapScope === 'day') {
       return selectedItems
-        .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
+        .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
         .map((item) => ({
           id: item.id,
           date: selectedDay.date,
@@ -732,7 +732,7 @@ export function App() {
     return tripPlan.days
       .map((day) => {
         const firstWithCoords = getActiveItems(day).find(
-          (item) => typeof item.lat === 'number' && typeof item.lng === 'number',
+          (item) => Number.isFinite(item.lat) && Number.isFinite(item.lng),
         );
         if (!firstWithCoords) return null;
         return {
@@ -1138,7 +1138,7 @@ export function App() {
       const hasPhotos = dayHasPhotos(day);
 
       const coords = items
-        .filter((item) => typeof item.lat === 'number' && typeof item.lng === 'number')
+        .filter((item) => Number.isFinite(item.lat) && Number.isFinite(item.lng))
         .map((item) => [item.lat as number, item.lng as number] as [number, number]);
       const photoPoints = getActualPhotoMapPointsForDay(day);
       const selectedDayPhotoPoints =
@@ -1181,7 +1181,9 @@ export function App() {
         }
       });
 
-      photoPoints.forEach((point) => {
+      photoPoints
+        .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+        .forEach((point) => {
         const photoMarker = L.circleMarker([point.lat, point.lng], {
           radius: isSelectedDate ? 5 : isTodayDate ? 4.5 : 4,
           color: '#ffffff',
@@ -1214,10 +1216,12 @@ export function App() {
       });
 
       if (isSelectedDate) {
-        selectedDayPhotoPoints.forEach((point) => {
-          selectedDayBounds.extend([point.lat, point.lng]);
-          selectedDayCoords.push([point.lat, point.lng]);
-        });
+        selectedDayPhotoPoints
+          .filter((point) => Number.isFinite(point.lat) && Number.isFinite(point.lng))
+          .forEach((point) => {
+            selectedDayBounds.extend([point.lat, point.lng]);
+            selectedDayCoords.push([point.lat, point.lng]);
+          });
       }
 
       if (coords.length >= 2) {
@@ -1241,7 +1245,11 @@ export function App() {
       }
     }
 
-    if (whereAmI.currentLatLng) {
+    if (
+      whereAmI.currentLatLng &&
+      Number.isFinite(whereAmI.currentLatLng[0]) &&
+      Number.isFinite(whereAmI.currentLatLng[1])
+    ) {
       const currentMarker = L.circleMarker(whereAmI.currentLatLng, {
         radius: 8,
         color: '#ffffff',
@@ -1346,8 +1354,10 @@ export function App() {
         (position) => {
           if (cancelled) return;
           const coords: [number, number] = [position.coords.latitude, position.coords.longitude];
+          const safeCoords: [number, number] | null =
+            Number.isFinite(coords[0]) && Number.isFinite(coords[1]) ? coords : null;
           setWhereAmI({
-            ...detectWhereAmI(tripPlan, selectedDate, coords, 'auto'),
+            ...detectWhereAmI(tripPlan, selectedDate, safeCoords, 'auto'),
             mode: 'auto',
           });
         },
@@ -1417,7 +1427,7 @@ export function App() {
     setWhereAmI({
       mode: 'manual',
       currentLatLng:
-        selectedItem && typeof selectedItem.lat === 'number' && typeof selectedItem.lng === 'number'
+        selectedItem && Number.isFinite(selectedItem.lat) && Number.isFinite(selectedItem.lng)
           ? [selectedItem.lat, selectedItem.lng]
           : null,
       activeDayId: day.date,

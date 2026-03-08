@@ -14,7 +14,7 @@ export interface ActualPhotoMapPoint {
 export function getActualPhotoMapPointsForDay(day: TripDay): ActualPhotoMapPoint[] {
   return (day.actualMoments || []).flatMap((moment) =>
     moment.photos
-      .filter((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')
+      .filter((photo) => Number.isFinite(photo.lat) && Number.isFinite(photo.lng))
       .map((photo) => ({
         id: photo.id,
         date: day.date,
