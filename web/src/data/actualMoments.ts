@@ -258,6 +258,96 @@ const FAMILY_ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
       photos: [],
     },
   ],
+  '2026-03-16': [
+    {
+      id: 'actual-2026-03-16-mom-madeira-arrival',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Mon, Mar 16 - Madeira arrival',
+      text: 'The thread for Madeira started with Douro Valley art shots, then a cold hotel-terrace arrival in Madeira before a storm rolled in.',
+      photos: [],
+    },
+  ],
+  '2026-03-17': [
+    {
+      id: 'actual-2026-03-17-mom-madeira-funchal',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Tue, Mar 17 - Funchal day',
+      text: 'Tuesday in Madeira centered on city-center views in Funchal, a sunset, and a food tour that generated the first big Madeira photo burst in the family thread.',
+      photos: [],
+    },
+  ],
+  '2026-03-18': [
+    {
+      id: 'actual-2026-03-18-mom-madeira-levada',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Wed, Mar 18 - Levada hike',
+      text: 'The Levada walk became one of the standout Portugal days: waterfalls, hand-built irrigation channels cut through lava rock, treacherous paths, and then rain, hail, and even snow on the drive back. Mom also noted that their 34-year-old guide had never seen snow before.',
+      photos: [],
+    },
+  ],
+  '2026-03-19': [
+    {
+      id: 'actual-2026-03-19-mom-madeira-funchal-harbor',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Thu, Mar 19 - Harbor and coast',
+      text: 'Thursday shifted into a calmer Madeira rhythm with the Santa Maria replica in Funchal, a calm-day-in-paradise note, and the memorable report that Jim was enjoying a very large gintonic.',
+      photos: [],
+    },
+  ],
+  '2026-03-21': [
+    {
+      id: 'actual-2026-03-21-mom-lisbon-departure',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Sat, Mar 21 - Lisbon departure',
+      text: 'This was the Lisbon-to-Morocco travel day, but the new media batch still catches a very Lisbon moment first: an airport breakfast before the Casablanca flight.',
+      photos: [],
+    },
+  ],
+  '2026-03-22': [
+    {
+      id: 'actual-2026-03-22-mom-sahara-arrival',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Sun, Mar 22 - Sahara arrival',
+      text: 'The Morocco thread opens with snow on the Atlas from the plane, then the first desert-camp notes and Sahara dune images once they reached the south.',
+      photos: [],
+    },
+  ],
+  '2026-03-23': [
+    {
+      id: 'actual-2026-03-23-mom-sahara-ouarzazate',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Mon, Mar 23 - Desert to Ouarzazate',
+      text: 'Monday morning brought a classic Sahara sequence in the thread: good morning from the desert, where they spent the night, desert critter tracks, and time with their hosts before the move north toward Ouarzazate.',
+      photos: [],
+    },
+  ],
+  '2026-03-24': [
+    {
+      id: 'actual-2026-03-24-mom-ouarzazate-to-marrakech',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Tue, Mar 24 - Ouarzazate to Marrakech',
+      text: 'Tuesday’s notes moved from the Ouarzazate hotel and fresh henna into the Atlas crossing, with snow still visible in the distance before the evening arrival in Marrakech.',
+      photos: [],
+    },
+  ],
+  '2026-03-25': [
+    {
+      id: 'actual-2026-03-25-mom-marrakech-palace',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Wed, Mar 25 - Marrakech palace day',
+      text: 'By Wednesday the thread was fully in Marrakech mode: beautiful palace interiors, medina lanes, and a set of portraits that match the palace-and-alley photos from the new dump.',
+      photos: [],
+    },
+  ],
+  '2026-03-26': [
+    {
+      id: 'actual-2026-03-26-mom-marrakech-wildflowers',
+      source: MOM_UPDATE_SOURCE,
+      whenLabel: 'Thu, Mar 26 - Wildflowers and dinner show',
+      text: 'Thursday’s thread moved from a good-morning-from-Marrakech note into the wildflower meadow and Atlas foothill images, then ended with mom’s candid write-up of an evening dinner show that felt visually vivid but culturally uncomfortable.',
+      photos: [],
+    },
+  ],
 };
 
 function cloneMoment(moment: TripActualMoment): TripActualMoment {

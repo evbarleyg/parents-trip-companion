@@ -33,7 +33,7 @@ describe('actual moments seed data', () => {
   });
 
   it('returns empty list for dates without seeded actuals', () => {
-    expect(getActualMomentsForDate('2026-03-25')).toEqual([]);
+    expect(getActualMomentsForDate('2026-04-04')).toEqual([]);
   });
 
   it('merges dad-specific entries into day lookups', () => {
@@ -126,6 +126,39 @@ describe('actual moments seed data', () => {
     expect(lisbonPhoto?.lng).toBeCloseTo(-9.136592, 5);
   });
 
+  it('imports the Madeira, Lisbon departure, and Morocco media dump with curated captions and selected videos', () => {
+    const madeiraHikeMoment = getActualMomentsForDate('2026-03-18').find(
+      (entry) => entry.id === 'actual-2026-03-18-photo-library',
+    );
+    const lisbonDepartureMoment = getActualMomentsForDate('2026-03-21').find(
+      (entry) => entry.id === 'actual-2026-03-21-photo-library',
+    );
+    const moroccoTransferMoment = getActualMomentsForDate('2026-03-24').find(
+      (entry) => entry.id === 'actual-2026-03-24-photo-library',
+    );
+    const marrakechFoothillsMoment = getActualMomentsForDate('2026-03-26').find(
+      (entry) => entry.id === 'actual-2026-03-26-photo-library',
+    );
+
+    expect(madeiraHikeMoment?.text.toLowerCase()).toContain('levada hike');
+    expect(madeiraHikeMoment?.photos).toHaveLength(3);
+    expect(madeiraHikeMoment?.videos).toHaveLength(1);
+    expect(madeiraHikeMoment?.photos[0]?.caption).toContain('Waterfall');
+
+    expect(lisbonDepartureMoment?.whenLabel).toContain('Lisbon departure');
+    expect(lisbonDepartureMoment?.photos).toHaveLength(1);
+    expect(lisbonDepartureMoment?.photos[0]?.caption).toContain('Lisbon');
+    expect(lisbonDepartureMoment?.photos[0]?.lat).toBeCloseTo(38.77013, 5);
+    expect(lisbonDepartureMoment?.photos[0]?.lng).toBeCloseTo(-9.12524, 5);
+
+    expect(moroccoTransferMoment?.photos).toHaveLength(8);
+    expect(moroccoTransferMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('henna'))).toBe(true);
+
+    expect(marrakechFoothillsMoment?.photos).toHaveLength(5);
+    expect(marrakechFoothillsMoment?.videos).toHaveLength(1);
+    expect(marrakechFoothillsMoment?.videos?.[0]?.caption.toLowerCase()).toContain('dinner-show');
+  });
+
   it('maps the Istanbul travelogue across March 2 through March 6', () => {
     const expectedByDate = {
       '2026-03-02': ['actual-2026-03-02-mom-istanbul-cihangir', 'galataport'],
@@ -133,6 +166,24 @@ describe('actual moments seed data', () => {
       '2026-03-04': ['actual-2026-03-04-mom-istanbul-besiktas-uskudar', 'kuzguncuk'],
       '2026-03-05': ['actual-2026-03-05-mom-istanbul-tarabya-dinner', 'tarabya'],
       '2026-03-06': ['actual-2026-03-06-mom-istanbul-balat-fener', 'balat'],
+    } as const;
+
+    for (const [date, [id, keyword]] of Object.entries(expectedByDate)) {
+      const moment = getActualMomentsForDate(date).find((entry) => entry.id === id);
+      expect(moment?.source.toLowerCase()).toContain('mom updates');
+      expect(moment?.text.toLowerCase()).toContain(keyword);
+      expect(moment?.photos).toEqual([]);
+    }
+  });
+
+  it('maps the Madeira and Morocco thread updates across March 16 through March 26', () => {
+    const expectedByDate = {
+      '2026-03-16': ['actual-2026-03-16-mom-madeira-arrival', 'storm'],
+      '2026-03-18': ['actual-2026-03-18-mom-madeira-levada', 'snow'],
+      '2026-03-21': ['actual-2026-03-21-mom-lisbon-departure', 'casablanca flight'],
+      '2026-03-22': ['actual-2026-03-22-mom-sahara-arrival', 'atlas'],
+      '2026-03-24': ['actual-2026-03-24-mom-ouarzazate-to-marrakech', 'henna'],
+      '2026-03-26': ['actual-2026-03-26-mom-marrakech-wildflowers', 'wildflower'],
     } as const;
 
     for (const [date, [id, keyword]] of Object.entries(expectedByDate)) {
