@@ -64,7 +64,7 @@ function buildPhotoMoment(
     source: PHOTO_LIBRARY_SOURCE,
     whenLabel,
     text,
-    photos: [...seeds].sort((left, right) => left.capturedAt.localeCompare(right.capturedAt)).map(buildPhoto),
+    photos: [...seeds].sort((left, right) => right.capturedAt.localeCompare(left.capturedAt)).map(buildPhoto),
     videos: videoSeeds.map(buildVideo),
   };
 }

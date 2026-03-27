@@ -329,7 +329,24 @@ function mergeHydratedItems(restoredItems: ItineraryItem[], seedItems: Itinerary
   return [...merged.values()].sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 }
 
-function hydrateDayWithSeed(restoredDay: TripDay | undefined, seedDay: TripDay | undefined): TripDay | undefined {
+function filterRestoredActualMomentsForSeedDate(
+  restoredMoments: TripActualMoment[] | undefined,
+  date: string,
+  seedMomentDateById: Map<string, string>,
+): TripActualMoment[] | undefined {
+  if (!restoredMoments) return restoredMoments;
+
+  return sanitizeActualMoments(restoredMoments).filter((moment) => {
+    const seededDate = seedMomentDateById.get(moment.id);
+    return !seededDate || seededDate === date;
+  });
+}
+
+function hydrateDayWithSeed(
+  restoredDay: TripDay | undefined,
+  seedDay: TripDay | undefined,
+  seedMomentDateById: Map<string, string>,
+): TripDay | undefined {
   if (!seedDay) return restoredDay;
   if (!restoredDay) {
     return {
@@ -350,7 +367,10 @@ function hydrateDayWithSeed(restoredDay: TripDay | undefined, seedDay: TripDay |
     summaryItems,
     detailItems,
     activeView: restoredDay.activeView || seedDay.activeView,
-    actualMoments: mergeActualMoments(restoredDay.actualMoments, seedDay.actualMoments),
+    actualMoments: mergeActualMoments(
+      filterRestoredActualMomentsForSeedDate(restoredDay.actualMoments, seedDay.date, seedMomentDateById),
+      seedDay.actualMoments,
+    ),
   };
 }
 
@@ -458,6 +478,9 @@ function applyStoredViewModes(plan: TripPlan, viewModes: Record<string, ViewMode
 export function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPlan {
   const restoredDaysByDate = new Map(plan.days.map((day) => [day.date, day]));
   const seedDaysByDate = new Map(seed.days.map((day) => [day.date, day]));
+  const seedMomentDateById = new Map(
+    seed.days.flatMap((day) => (day.actualMoments || []).map((moment) => [moment.id, day.date] as const)),
+  );
   const allDates = [...new Set([...seed.days.map((day) => day.date), ...plan.days.map((day) => day.date)])].sort();
 
   return {
@@ -469,7 +492,7 @@ export function hydratePlanWithSeedData(plan: TripPlan, seed: TripPlan): TripPla
     timezone: plan.timezone || seed.timezone,
     sources: mergeSourceDocuments(plan.sources, seed.sources),
     days: allDates
-      .map((date) => hydrateDayWithSeed(restoredDaysByDate.get(date), seedDaysByDate.get(date)))
+      .map((date) => hydrateDayWithSeed(restoredDaysByDate.get(date), seedDaysByDate.get(date), seedMomentDateById))
       .filter((day): day is TripDay => Boolean(day)),
   };
 }
@@ -516,10 +539,10 @@ function segmentContainsDate(segment: RegionSegment, date: string): boolean {
   return date >= segment.startDate && date <= segment.endDate;
 }
 
-export function sortActualMomentRowsAscending(rows: ActualMomentRow[]): ActualMomentRow[] {
+export function sortActualMomentRowsDescending(rows: ActualMomentRow[]): ActualMomentRow[] {
   return [...rows].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    return a.moment.whenLabel.localeCompare(b.moment.whenLabel);
+    if (a.date !== b.date) return b.date.localeCompare(a.date);
+    return b.moment.whenLabel.localeCompare(a.moment.whenLabel);
   });
 }
 
@@ -636,7 +659,7 @@ export function App() {
   );
   const tripPhotoMomentRows = useMemo(
     () =>
-      sortActualMomentRowsAscending(
+      sortActualMomentRowsDescending(
         tripPlan.days.flatMap((day) =>
           (day.actualMoments || [])
             .filter((moment) => hasMomentMedia(moment))
@@ -660,10 +683,10 @@ export function App() {
         return aDistance - bDistance;
       });
 
-    return sortActualMomentRowsAscending(nearbyRows.slice(0, 20));
+    return sortActualMomentRowsDescending(nearbyRows.slice(0, 20));
   }, [selectedDate, selectedDateMs, tripPhotoMomentRows]);
   const mainPagePhotoRows = useMemo(
-    () => (selectedDayPhotoRows.length > 0 ? sortActualMomentRowsAscending(selectedDayPhotoRows) : nearbyTripPhotoRows),
+    () => (selectedDayPhotoRows.length > 0 ? sortActualMomentRowsDescending(selectedDayPhotoRows) : nearbyTripPhotoRows),
     [nearbyTripPhotoRows, selectedDayPhotoRows],
   );
   const mainPageUsesNearbyFallback = selectedDayPhotoRows.length === 0 && mainPagePhotoRows.length > 0;

@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { App, hydratePlanWithSeedData, mediaDisplayCaption, sortActualMomentRowsAscending } from './App';
+import { App, hydratePlanWithSeedData, mediaDisplayCaption, sortActualMomentRowsDescending } from './App';
 import { buildSeedTripPlan } from './data/seedTrip';
 
 vi.mock('./lib/api', () => ({
@@ -185,9 +185,11 @@ describe('App helper regression', () => {
       feb11.detailItems = [];
     }
 
-    if (march5Library?.photos[1]) {
-      march5Library.photos[1].alt = 'Istanbul photo from March 5, 2026 captured during the trip.';
-      march5Library.photos[1].caption = 'IMG_1437.heic | EXIF 2026:03:05 07:23:01 | converted from HEIC';
+    const staleSunrisePhoto = march5Library?.photos.find((photo) => photo.id === 'actual-photo-2026-03-05-istanbul-02');
+
+    if (staleSunrisePhoto) {
+      staleSunrisePhoto.alt = 'Istanbul photo from March 5, 2026 captured during the trip.';
+      staleSunrisePhoto.caption = 'IMG_1437.heic | EXIF 2026:03:05 07:23:01 | converted from HEIC';
     }
 
     const hydrated = hydratePlanWithSeedData(stalePlan, buildSeedTripPlan());
@@ -200,7 +202,35 @@ describe('App helper regression', () => {
     expect(hydratedFeb11?.detailItems.map((item) => item.title)).toContain(
       'Shindagha Museum and cultural understanding lunch',
     );
-    expect(hydratedMarch5?.photos[1].caption).toBe('Another sunrise view with the red sky reflecting on the water.');
+    const hydratedSunrisePhoto = hydratedMarch5?.photos.find((photo) => photo.id === 'actual-photo-2026-03-05-istanbul-02');
+    expect(hydratedSunrisePhoto?.caption).toBe('Another sunrise view with the red sky reflecting on the water.');
+  });
+
+  it('drops stale seeded media moments that were cached under the wrong Portugal date', () => {
+    const stalePlan = buildSeedTripPlan();
+    const lisbonDay = stalePlan.days.find((day) => day.date === '2026-03-09');
+    const sintraDay = stalePlan.days.find((day) => day.date === '2026-03-10');
+
+    const staleSintraMoment = sintraDay?.actualMoments?.find((moment) => moment.id === 'actual-2026-03-10-photo-library');
+    if (lisbonDay && staleSintraMoment) {
+      lisbonDay.actualMoments = [...(lisbonDay.actualMoments || []), staleSintraMoment];
+    }
+    if (sintraDay) {
+      sintraDay.actualMoments = (sintraDay.actualMoments || []).filter(
+        (moment) => moment.id !== 'actual-2026-03-10-photo-library',
+      );
+    }
+
+    const hydrated = hydratePlanWithSeedData(stalePlan, buildSeedTripPlan());
+    const hydratedLisbonDay = hydrated.days.find((day) => day.date === '2026-03-09');
+    const hydratedSintraDay = hydrated.days.find((day) => day.date === '2026-03-10');
+
+    expect(hydratedLisbonDay?.actualMoments?.some((moment) => moment.id === 'actual-2026-03-10-photo-library')).toBe(
+      false,
+    );
+    expect(hydratedSintraDay?.actualMoments?.some((moment) => moment.id === 'actual-2026-03-10-photo-library')).toBe(
+      true,
+    );
   });
 
   it('uses only meaningful media captions in the UI', () => {
@@ -224,8 +254,8 @@ describe('App helper regression', () => {
     ).toBeNull();
   });
 
-  it('sorts media rows in ascending date order', () => {
-    const sorted = sortActualMomentRowsAscending([
+  it('sorts media rows in descending date order', () => {
+    const sorted = sortActualMomentRowsDescending([
       {
         date: '2026-03-24',
         moment: { id: 'b', source: 'x', whenLabel: 'Tue, Mar 24', text: '', photos: [] },
@@ -241,9 +271,9 @@ describe('App helper regression', () => {
     ]);
 
     expect(sorted.map((row) => `${row.date}:${row.moment.whenLabel}`)).toEqual([
-      '2026-03-22:Sun, Mar 22',
-      '2026-03-24:Morning',
       '2026-03-24:Tue, Mar 24',
+      '2026-03-24:Morning',
+      '2026-03-22:Sun, Mar 22',
     ]);
   });
 });

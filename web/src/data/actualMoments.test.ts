@@ -176,12 +176,12 @@ describe('actual moments seed data', () => {
     expect(funchalMoment?.text.toLowerCase()).toContain('funchal');
     expect(funchalMoment?.photos).toHaveLength(8);
     expect(funchalMoment?.videos).toHaveLength(2);
-    expect(funchalMoment?.photos[0]?.caption.toLowerCase()).toContain('cannon');
+    expect(funchalMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('cannon'))).toBe(true);
 
     expect(madeiraHikeMoment?.text.toLowerCase()).toContain('levada hike');
     expect(madeiraHikeMoment?.photos).toHaveLength(3);
     expect(madeiraHikeMoment?.videos).toHaveLength(1);
-    expect(madeiraHikeMoment?.photos[0]?.caption).toContain('Waterfall');
+    expect(madeiraHikeMoment?.photos.some((photo) => photo.caption.includes('Waterfall'))).toBe(true);
 
     expect(lisbonDepartureMoment?.whenLabel).toContain('Lisbon departure');
     expect(lisbonDepartureMoment?.photos).toHaveLength(1);
