@@ -2,7 +2,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { App, hydratePlanWithSeedData, mediaDisplayCaption } from './App';
+import { App, hydratePlanWithSeedData, mediaDisplayCaption, sortActualMomentRowsAscending } from './App';
 import { buildSeedTripPlan } from './data/seedTrip';
 
 vi.mock('./lib/api', () => ({
@@ -49,13 +49,16 @@ function findButtonByText(container: HTMLElement, label: string): HTMLButtonElem
   ) as HTMLButtonElement | undefined;
 }
 
-function findHeadingByText(container: HTMLElement, label: string): HTMLHeadingElement | undefined {
-  return Array.from(container.querySelectorAll('h2')).find(
-    (heading) => heading.textContent?.trim() === label,
-  ) as HTMLHeadingElement | undefined;
+function getTestElement(container: HTMLElement, testId: string): HTMLElement {
+  const element = container.querySelector(`[data-testid="${testId}"]`);
+  if (!element) {
+    throw new Error(`Unable to find element with data-testid="${testId}"`);
+  }
+
+  return element as HTMLElement;
 }
 
-describe('App media layout regression', () => {
+describe('App one-page workspace', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -85,55 +88,41 @@ describe('App media layout regression', () => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('keeps map visible in photo gallery and removes the top quick media rail', async () => {
-    const photoGalleryTab = findButtonByText(container, 'Photo Gallery');
-
-    expect(photoGalleryTab).toBeTruthy();
-
-    await act(async () => {
-      photoGalleryTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flushEffects();
-    });
-
-    const mapHeadings = Array.from(container.querySelectorAll('h2')).filter(
-      (heading) => heading.textContent?.trim() === 'Map',
-    );
-    const tripMediaHeading = findHeadingByText(container, 'Trip Media');
-    const mapHeading = findHeadingByText(container, 'Map');
-
-    expect(tripMediaHeading).toBeTruthy();
-    expect(mapHeading).toBeTruthy();
-    expect(tripMediaHeading?.compareDocumentPosition(mapHeading!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(mapHeadings.length).toBeGreaterThan(0);
-    expect(container.textContent).toContain('Route Overview');
-    expect(container.textContent).not.toContain('Map:');
-    expect(container.textContent).not.toContain('Road');
-    expect(container.textContent).not.toContain('Satellite + Roads');
-    expect(container.textContent).not.toContain('Quickly scan photos/videos and jump to that day.');
+  it('removes the old tabbed shell and location controls', () => {
+    expect(container.querySelectorAll('.app-tab')).toHaveLength(0);
+    expect(findButtonByText(container, 'Full Trip')).toBeUndefined();
+    expect(findButtonByText(container, 'Day Details')).toBeUndefined();
+    expect(findButtonByText(container, 'Photo Gallery')).toBeUndefined();
+    expect(findButtonByText(container, 'Locate')).toBeUndefined();
+    expect(findButtonByText(container, 'Locate + Auto Refresh')).toBeUndefined();
+    expect(container.textContent).not.toContain('Location confidence');
+    expect(container.querySelectorAll('select')).toHaveLength(0);
+    expect(container.querySelector('.toolbar-popover')).toBeNull();
+    expect(getTestElement(container, 'header-day-picker')).toBeTruthy();
   });
 
-  it('shows trip update notes in day details', async () => {
-    const dayDetailsTab = findButtonByText(container, 'Day Details');
+  it('renders the compact one-page layout with the map before story and media', () => {
+    expect(container.querySelector('[data-testid="trip-rail"]')).toBeNull();
+    expect(container.querySelector('[data-testid="mobile-trip-nav"]')).toBeNull();
 
-    expect(dayDetailsTab).toBeTruthy();
+    const daySummary = getTestElement(container, 'day-summary-strip');
+    const mapCard = getTestElement(container, 'map-card');
+    const dayTimeline = getTestElement(container, 'day-timeline-card');
+    const tripUpdates = getTestElement(container, 'trip-updates-card');
+    const tripMedia = getTestElement(container, 'trip-media-card');
 
-    await act(async () => {
-      dayDetailsTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flushEffects();
-    });
-
-    const tripMediaHeading = findHeadingByText(container, 'Trip Media');
-    const mapHeading = findHeadingByText(container, 'Map');
-
-    expect(tripMediaHeading).toBeTruthy();
-    expect(mapHeading).toBeTruthy();
-    expect(tripMediaHeading?.compareDocumentPosition(mapHeading!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(daySummary.compareDocumentPosition(mapCard)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(mapCard.compareDocumentPosition(dayTimeline)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(dayTimeline.compareDocumentPosition(tripUpdates)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(mapCard.compareDocumentPosition(tripMedia)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(container.textContent).toContain('Trip Updates');
-    expect(container.textContent).not.toContain('Dad Updates');
+    expect(container.textContent).toContain('Trip Media');
+    expect(container.textContent).toContain('Map');
+    expect(getTestElement(container, 'section-jump-row')).toBeTruthy();
   });
 });
 
-describe('App mobile walkthrough', () => {
+describe('App mobile workspace', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -163,34 +152,21 @@ describe('App mobile walkthrough', () => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('keeps primary navigation and mobile controls usable', async () => {
-    expect(findButtonByText(container, 'Locate')).toBeTruthy();
+  it('uses the same compact header picker on mobile', async () => {
+    const picker = getTestElement(container, 'header-day-picker');
+
+    expect(picker).toBeTruthy();
+    expect(container.querySelector('[data-testid="mobile-trip-nav"]')).toBeNull();
+    expect(container.querySelector('[data-testid="trip-rail"]')).toBeNull();
+
+    await act(async () => {
+      picker.setAttribute('open', '');
+      await flushEffects();
+    });
+
+    expect(picker.textContent).toContain('Today');
     expect(container.textContent).toContain('Trip Media');
-
-    const fullTripTab = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.classList.contains('app-tab') && button.textContent?.trim() === 'Full Trip',
-    ) as HTMLButtonElement | undefined;
-    const photoGalleryTab = findButtonByText(container, 'Photo Gallery');
-
-    expect(fullTripTab).toBeTruthy();
-    expect(photoGalleryTab).toBeTruthy();
-
-    await act(async () => {
-      fullTripTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain('Trip Timeline');
-
-    await act(async () => {
-      photoGalleryTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await flushEffects();
-    });
-
-    expect(container.textContent).toContain('Gallery View');
-    expect(container.textContent).toContain('Route Overview');
-    expect(container.textContent).not.toContain('Road');
-    expect(container.textContent).not.toContain('Satellite + Roads');
+    expect(container.textContent).toContain('Map');
   });
 });
 
@@ -240,5 +216,34 @@ describe('App helper regression', () => {
     expect(mediaDisplayCaption('Fiery sunrise over the Bosporus and city rooftops from the hotel.', undefined)).toBe(
       'Fiery sunrise over the Bosporus and city rooftops from the hotel.',
     );
+    expect(
+      mediaDisplayCaption(
+        '/Users/evanbarley-greenfield/Downloads/IMG_1437.heic',
+        '/Users/evanbarley-greenfield/Downloads/IMG_1437.heic',
+      ),
+    ).toBeNull();
+  });
+
+  it('sorts media rows in ascending date order', () => {
+    const sorted = sortActualMomentRowsAscending([
+      {
+        date: '2026-03-24',
+        moment: { id: 'b', source: 'x', whenLabel: 'Tue, Mar 24', text: '', photos: [] },
+      },
+      {
+        date: '2026-03-22',
+        moment: { id: 'a', source: 'x', whenLabel: 'Sun, Mar 22', text: '', photos: [] },
+      },
+      {
+        date: '2026-03-24',
+        moment: { id: 'c', source: 'x', whenLabel: 'Morning', text: '', photos: [] },
+      },
+    ]);
+
+    expect(sorted.map((row) => `${row.date}:${row.moment.whenLabel}`)).toEqual([
+      '2026-03-22:Sun, Mar 22',
+      '2026-03-24:Morning',
+      '2026-03-24:Tue, Mar 24',
+    ]);
   });
 });

@@ -803,15 +803,28 @@ a:focus-visible {
   border-radius: 10px;
   overflow: hidden;
   background: #ffffff;
+  display: grid;
+  gap: 0;
+  align-content: start;
+}
+
+.actual-photo-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f7fb;
 }
 
 .actual-photo-card img,
 .actual-photo-card video {
-  width: 100%;
-  height: 220px;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: clamp(280px, 46vw, 720px);
   display: block;
   object-fit: contain;
-  background: #f3f7fb;
+  background: transparent;
+  margin: 0 auto;
 }
 
 .actual-photo-card figcaption {
@@ -1281,5 +1294,356 @@ a:focus-visible {
     gap: 2px;
     padding: 8px 10px;
     font-size: 0.8rem;
+  }
+}
+
+.topbar-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.topbar-selected-day {
+  margin: 2px 0 0;
+  color: #35556e;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.topbar {
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.topbar-actions {
+  align-items: flex-start;
+  position: relative;
+}
+
+.header-day-picker {
+  position: relative;
+  border: 1px solid #c7d4dd;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #21435c;
+}
+
+.header-day-picker summary {
+  list-style: none;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 9px 12px;
+  display: grid;
+  gap: 2px;
+  min-width: 250px;
+}
+
+.header-day-picker summary::-webkit-details-marker {
+  display: none;
+}
+
+.header-day-picker summary span {
+  font-weight: 700;
+}
+
+.header-day-picker summary small {
+  color: #516879;
+  font-size: 0.78rem;
+}
+
+.header-day-picker[open] {
+  box-shadow: 0 12px 28px rgba(33, 48, 59, 0.12);
+}
+
+.header-day-picker-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(760px, calc(100vw - 48px));
+  max-height: min(68vh, 720px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.98);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(28, 43, 53, 0.16);
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.header-day-picker-section {
+  display: grid;
+  gap: 8px;
+}
+
+.header-day-picker-region {
+  width: fit-content;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef4f8;
+  border-color: #c7d4dd;
+  color: #27465f;
+}
+
+.header-day-picker-days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.header-day-option {
+  width: 100%;
+  min-height: 0;
+  border: 1px solid #d4dce4;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #243847;
+  padding: 9px 10px;
+  text-align: left;
+  display: grid;
+  gap: 6px;
+}
+
+.header-day-option span:first-child {
+  font-weight: 700;
+}
+
+.header-day-option-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.trip-workspace {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.trip-main {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.trip-main > * {
+  min-width: 0;
+}
+
+.header-day-picker-region.active,
+.header-day-option.active {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 0 0 1px rgba(143, 76, 29, 0.28);
+  background: #fff4e9;
+  color: #48270f;
+}
+
+.trip-section-header {
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.day-summary-strip {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.day-summary-strip .day-overview-pills {
+  margin-bottom: 6px;
+}
+
+.section-jump-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-jump-row a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid #c4d2dc;
+  border-radius: 999px;
+  background: #eef4f8;
+  color: #27465f;
+  padding: 5px 11px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.day-story-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.95fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.day-story-grid > * {
+  min-width: 0;
+}
+
+.day-media-block {
+  min-width: 0;
+}
+
+.trip-media-card {
+  display: grid;
+  gap: 10px;
+}
+
+.trip-media-card .card-header-row {
+  margin-bottom: 0;
+}
+
+.trip-media-header {
+  align-items: flex-start;
+  gap: 10px 14px;
+}
+
+.trip-media-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px 12px;
+  flex-wrap: wrap;
+}
+
+.trip-media-heading h2 {
+  margin: 0;
+}
+
+.trip-media-context {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: var(--muted);
+}
+
+.media-scope-toggle {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.actual-moment-copy {
+  color: #395163;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.actual-photo-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+
+.actual-photo-card {
+  min-width: 0;
+}
+
+.actual-photo-card img {
+  width: auto;
+}
+
+.actual-photo-card video {
+  width: auto;
+}
+
+.actual-photo-card figcaption {
+  padding: 8px 10px 10px;
+  font-size: 0.84rem;
+  -webkit-line-clamp: 3;
+}
+
+.day-annotations {
+  margin: 0;
+}
+
+.day-annotations h2 {
+  margin: 0;
+  font-size: 1rem;
+  color: #5a2f12;
+}
+
+.focus-moments,
+.day-overview-list,
+.map-stop-list {
+  max-height: none;
+  overflow: visible;
+}
+
+.map-stop-shell {
+  margin-top: 10px;
+}
+
+.map-shell .map-scope-toggle {
+  margin: 0;
+  width: min(240px, 100%);
+}
+
+.status-row {
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 980px) {
+  .topbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .header-day-picker summary {
+    min-width: 0;
+  }
+
+  .header-day-picker-panel {
+    right: auto;
+    left: 0;
+    width: min(100vw - 32px, 100%);
+  }
+
+  .header-day-picker-days {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-section-header {
+    flex-direction: column;
+  }
+
+  .day-overview-pills {
+    justify-content: flex-start;
+  }
+
+  .day-story-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trip-media-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trip-media-heading {
+    align-items: flex-start;
+  }
+
+  .media-scope-toggle {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actual-photo-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .map {
+    min-height: clamp(280px, 48vh, 420px);
+    max-height: none;
   }
 }

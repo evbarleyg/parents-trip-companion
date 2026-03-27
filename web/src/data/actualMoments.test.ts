@@ -84,7 +84,7 @@ describe('actual moments seed data', () => {
     }
   });
 
-  it('imports the Maldives and Istanbul photo-library sets with GPS where available', () => {
+  it('imports the Maldives and Istanbul photo-library sets with human-readable trip context', () => {
     const maldivesMoment = getActualMomentsForDate('2026-02-28').find(
       (entry) => entry.id === 'actual-2026-02-28-photo-library',
     );
@@ -95,18 +95,20 @@ describe('actual moments seed data', () => {
       (entry) => entry.id === 'actual-2026-03-05-photo-library',
     );
 
-    expect(maldivesMoment?.source.toLowerCase()).toContain('photo library export');
+    expect(maldivesMoment?.source.toLowerCase()).toContain('family photo library');
     expect(maldivesMoment?.photos).toHaveLength(5);
     expect(maldivesMoment?.photos.every((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(
       true,
     );
+    expect(maldivesMoment?.text.toLowerCase()).toContain('machchafushi');
 
     expect(istanbulMoment?.photos).toHaveLength(7);
     expect(istanbulMoment?.photos.some((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(
       true,
     );
+    expect(istanbulMoment?.text.toLowerCase()).toContain('galataport');
 
-    expect(marchFiveMoment?.text.toLowerCase()).toContain('re-rendered into web-safe jpegs');
+    expect(marchFiveMoment?.text.toLowerCase()).toContain('museum-and-city-views');
     expect(marchFiveMoment?.photos).toHaveLength(6);
     expect(marchFiveMoment?.photos.some((photo) => photo.src.endsWith('.jpeg'))).toBe(true);
     expect(marchFiveMoment?.photos.some((photo) => typeof photo.lat === 'number' && typeof photo.lng === 'number')).toBe(true);
@@ -119,7 +121,7 @@ describe('actual moments seed data', () => {
     const lisbonPhoto = marchSevenMoment?.photos.find((photo) => photo.caption.toLowerCase().includes('lisbon'));
 
     expect(marchSevenMoment?.whenLabel).toContain('Lisbon arrival');
-    expect(marchSevenMoment?.text.toLowerCase()).toContain('lisbon waterfront view');
+    expect(marchSevenMoment?.text.toLowerCase()).toContain('lisbon waterfront');
     expect(lisbonPhoto?.alt).toContain('Lisbon');
     expect(lisbonPhoto?.caption).toContain('Lisbon');
     expect(lisbonPhoto?.lat).toBeCloseTo(38.707889, 5);
@@ -127,6 +129,21 @@ describe('actual moments seed data', () => {
   });
 
   it('imports the Madeira, Lisbon departure, and Morocco media dump with curated captions and selected videos', () => {
+    const lisbonWalkMoment = getActualMomentsForDate('2026-03-08').find(
+      (entry) => entry.id === 'actual-2026-03-08-photo-library',
+    );
+    const sintraMoment = getActualMomentsForDate('2026-03-10').find(
+      (entry) => entry.id === 'actual-2026-03-10-photo-library',
+    );
+    const douroMoment = getActualMomentsForDate('2026-03-15').find(
+      (entry) => entry.id === 'actual-2026-03-15-photo-library',
+    );
+    const madeiraArrivalMoment = getActualMomentsForDate('2026-03-16').find(
+      (entry) => entry.id === 'actual-2026-03-16-photo-library',
+    );
+    const funchalMoment = getActualMomentsForDate('2026-03-17').find(
+      (entry) => entry.id === 'actual-2026-03-17-photo-library',
+    );
     const madeiraHikeMoment = getActualMomentsForDate('2026-03-18').find(
       (entry) => entry.id === 'actual-2026-03-18-photo-library',
     );
@@ -140,6 +157,27 @@ describe('actual moments seed data', () => {
       (entry) => entry.id === 'actual-2026-03-26-photo-library',
     );
 
+    expect(lisbonWalkMoment?.text.toLowerCase()).toContain('lisbon');
+    expect(lisbonWalkMoment?.photos).toHaveLength(4);
+    expect(lisbonWalkMoment?.photos.some((photo) => photo.caption.includes('Praça'))).toBe(true);
+
+    expect(sintraMoment?.text.toLowerCase()).toContain('sintra');
+    expect(sintraMoment?.photos).toHaveLength(11);
+    expect(sintraMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('cloister'))).toBe(true);
+
+    expect(douroMoment?.text.toLowerCase()).toContain('douro');
+    expect(douroMoment?.photos).toHaveLength(9);
+    expect(douroMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('valley'))).toBe(true);
+
+    expect(madeiraArrivalMoment?.photos).toHaveLength(1);
+    expect(madeiraArrivalMoment?.videos).toHaveLength(6);
+    expect(madeiraArrivalMoment?.videos?.[0]?.caption.toLowerCase()).toContain('sea view');
+
+    expect(funchalMoment?.text.toLowerCase()).toContain('funchal');
+    expect(funchalMoment?.photos).toHaveLength(8);
+    expect(funchalMoment?.videos).toHaveLength(2);
+    expect(funchalMoment?.photos[0]?.caption.toLowerCase()).toContain('cannon');
+
     expect(madeiraHikeMoment?.text.toLowerCase()).toContain('levada hike');
     expect(madeiraHikeMoment?.photos).toHaveLength(3);
     expect(madeiraHikeMoment?.videos).toHaveLength(1);
@@ -151,11 +189,11 @@ describe('actual moments seed data', () => {
     expect(lisbonDepartureMoment?.photos[0]?.lat).toBeCloseTo(38.77013, 5);
     expect(lisbonDepartureMoment?.photos[0]?.lng).toBeCloseTo(-9.12524, 5);
 
-    expect(moroccoTransferMoment?.photos).toHaveLength(8);
+    expect(moroccoTransferMoment?.photos).toHaveLength(9);
     expect(moroccoTransferMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('henna'))).toBe(true);
 
     expect(marrakechFoothillsMoment?.photos).toHaveLength(5);
-    expect(marrakechFoothillsMoment?.videos).toHaveLength(1);
+    expect(marrakechFoothillsMoment?.videos).toHaveLength(3);
     expect(marrakechFoothillsMoment?.videos?.[0]?.caption.toLowerCase()).toContain('dinner-show');
   });
 
@@ -261,12 +299,13 @@ describe('actual moments seed data', () => {
 
   it('keeps dad media captions human readable instead of exposing raw EXIF filenames', () => {
     const salalahMedia = getActualMomentsForDate('2026-02-12').find((moment) =>
-      moment.source.toLowerCase().includes('dad media dump'),
+      moment.source.toLowerCase().includes('dad photos'),
     );
     const muscatFinaleMedia = getActualMomentsForDate('2026-02-21').find((moment) =>
-      moment.source.toLowerCase().includes('dad media dump'),
+      moment.source.toLowerCase().includes('dad photos'),
     );
 
+    expect(salalahMedia?.text).not.toContain('EXIF');
     expect(salalahMedia?.photos[0].caption).toContain('Salalah arrival');
     expect(salalahMedia?.photos[0].caption).not.toContain('IMG_');
     expect(salalahMedia?.photos[0].caption).not.toContain('EXIF');

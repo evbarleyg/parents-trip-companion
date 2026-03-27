@@ -1,7 +1,7 @@
 import type { TripActualMoment } from '../types';
 
 const DAD_TEXT_SOURCE = 'Dad updates (B-G-M Fam thread)';
-const DAD_PHOTO_SOURCE = 'Dad media dump (EXIF date + itinerary geocode fallback)';
+const DAD_PHOTO_SOURCE = 'Dad photos and videos';
 
 interface DayGeo {
   region: string;
@@ -234,10 +234,6 @@ const DAD_PHOTOS_BY_DATE: Record<string, string[]> = {
   '2026-02-19': ['dad-2026-02-19-img-0686.jpeg', 'dad-2026-02-19-img-1304.jpeg'],
 };
 
-function formatGeo(geo: DayGeo): string {
-  return `${geo.region} (${geo.lat.toFixed(4)}, ${geo.lng.toFixed(4)})`;
-}
-
 function formatDadWhenLabel(date: string): string {
   const value = new Date(`${date}T00:00:00Z`);
   const label = new Intl.DateTimeFormat('en-US', {
@@ -246,7 +242,7 @@ function formatDadWhenLabel(date: string): string {
     day: 'numeric',
     timeZone: 'UTC',
   }).format(value);
-  return `${label} - Dad media set`;
+  return `${label} - Dad photo set`;
 }
 
 function dadMediaContext(date: string): string {
@@ -277,13 +273,14 @@ function buildTextMoments(date: string): TripActualMoment[] {
 function buildPhotoMoment(date: string, fileNames: string[]): TripActualMoment {
   const geo = GEO_BY_DATE[date];
   const videos = DAD_VIDEOS_BY_DATE[date] || [];
+  const context = dadMediaContext(date);
   return {
     id: `dad-media-${date}`,
     source: DAD_PHOTO_SOURCE,
     whenLabel: formatDadWhenLabel(date),
     text: geo
-      ? `Media were dated from EXIF creation metadata. GPS tags were missing in the shared export, so map location is inferred from the itinerary day anchor at ${formatGeo(geo)}.`
-      : 'Media were dated from EXIF creation metadata. GPS tags were missing in the shared export.',
+      ? `Shared photos and videos from the ${context}, centered around the ${geo.region} part of the trip.`
+      : `Shared photos and videos from the ${context}.`,
     photos: fileNames.map((fileName, index) => {
       return {
         id: `dad-photo-${date}-${index + 1}`,
