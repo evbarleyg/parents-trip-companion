@@ -132,6 +132,9 @@ describe('actual moments seed data', () => {
     const lisbonWalkMoment = getActualMomentsForDate('2026-03-08').find(
       (entry) => entry.id === 'actual-2026-03-08-photo-library',
     );
+    const lisbonMonumentsMoment = getActualMomentsForDate('2026-03-09').find(
+      (entry) => entry.id === 'actual-2026-03-09-photo-library',
+    );
     const sintraMoment = getActualMomentsForDate('2026-03-10').find(
       (entry) => entry.id === 'actual-2026-03-10-photo-library',
     );
@@ -161,9 +164,13 @@ describe('actual moments seed data', () => {
     expect(lisbonWalkMoment?.photos).toHaveLength(4);
     expect(lisbonWalkMoment?.photos.some((photo) => photo.caption.includes('Praça'))).toBe(true);
 
+    expect(lisbonMonumentsMoment?.text.toLowerCase()).toContain('belem');
+    expect(lisbonMonumentsMoment?.photos).toHaveLength(12);
+    expect(lisbonMonumentsMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('jeronimos'))).toBe(true);
+
     expect(sintraMoment?.text.toLowerCase()).toContain('sintra');
-    expect(sintraMoment?.photos).toHaveLength(11);
-    expect(sintraMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('cloister'))).toBe(true);
+    expect(sintraMoment?.photos).toHaveLength(6);
+    expect(sintraMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('pena palace'))).toBe(true);
 
     expect(douroMoment?.text.toLowerCase()).toContain('douro');
     expect(douroMoment?.photos).toHaveLength(9);

@@ -652,7 +652,6 @@ export function App() {
     () => selectedActualMomentRows.filter((row) => hasMomentMedia(row.moment)),
     [selectedActualMomentRows],
   );
-  const selectedDateMs = useMemo(() => parseTripDateMs(selectedDate), [selectedDate]);
   const photoDates = useMemo(
     () => new Set(tripPlan.days.filter((day) => dayHasPhotos(day)).map((day) => day.date)),
     [tripPlan.days],
@@ -669,27 +668,10 @@ export function App() {
     [tripPlan.days],
   );
   const fullTripPhotoRows = useMemo(() => tripPhotoMomentRows, [tripPhotoMomentRows]);
-  const nearbyTripPhotoRows = useMemo(() => {
-    const hasSelectedTimestamp = Number.isFinite(selectedDateMs);
-
-    const nearbyRows = tripPhotoMomentRows
-      .filter((row) => row.date !== selectedDate)
-      .sort((a, b) => {
-        if (!hasSelectedTimestamp) return b.date.localeCompare(a.date);
-
-        const aDistance = Math.abs(parseTripDateMs(a.date) - selectedDateMs);
-        const bDistance = Math.abs(parseTripDateMs(b.date) - selectedDateMs);
-        if (aDistance === bDistance) return b.date.localeCompare(a.date);
-        return aDistance - bDistance;
-      });
-
-    return sortActualMomentRowsDescending(nearbyRows.slice(0, 20));
-  }, [selectedDate, selectedDateMs, tripPhotoMomentRows]);
   const mainPagePhotoRows = useMemo(
-    () => (selectedDayPhotoRows.length > 0 ? sortActualMomentRowsDescending(selectedDayPhotoRows) : nearbyTripPhotoRows),
-    [nearbyTripPhotoRows, selectedDayPhotoRows],
+    () => sortActualMomentRowsDescending(selectedDayPhotoRows),
+    [selectedDayPhotoRows],
   );
-  const mainPageUsesNearbyFallback = selectedDayPhotoRows.length === 0 && mainPagePhotoRows.length > 0;
   const visiblePhotoRows = useMemo(
     () => (photoScope === 'selected_day' ? mainPagePhotoRows : fullTripPhotoRows),
     [fullTripPhotoRows, mainPagePhotoRows, photoScope],
@@ -1677,7 +1659,7 @@ export function App() {
             </section>
 
             <section id="trip-media" className="day-media-block">
-              {renderActualMomentsCard(visiblePhotoRows, photoScope === 'selected_day' && mainPageUsesNearbyFallback)}
+              {renderActualMomentsCard(visiblePhotoRows)}
             </section>
           </div>
         </section>
