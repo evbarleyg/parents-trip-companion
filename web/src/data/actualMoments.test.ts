@@ -33,7 +33,7 @@ describe('actual moments seed data', () => {
   });
 
   it('returns empty list for dates without seeded actuals', () => {
-    expect(getActualMomentsForDate('2026-04-04')).toEqual([]);
+    expect(getActualMomentsForDate('2026-04-06')).toEqual([]);
   });
 
   it('merges dad-specific entries into day lookups', () => {
@@ -159,6 +159,22 @@ describe('actual moments seed data', () => {
     const marrakechFoothillsMoment = getActualMomentsForDate('2026-03-26').find(
       (entry) => entry.id === 'actual-2026-03-26-photo-library',
     );
+    const fezArrivalMoment = getActualMomentsForDate('2026-03-29').find(
+      (entry) => entry.id === 'actual-2026-03-29-photo-library',
+    );
+    const fezMoment = getActualMomentsForDate('2026-03-30').find((entry) => entry.id === 'actual-2026-03-30-photo-library');
+    const volubilisMoment = getActualMomentsForDate('2026-03-31').find(
+      (entry) => entry.id === 'actual-2026-03-31-photo-library',
+    );
+    const chefchaouenMoment = getActualMomentsForDate('2026-04-01').find(
+      (entry) => entry.id === 'actual-2026-04-01-photo-library',
+    );
+    const tangierMoment = getActualMomentsForDate('2026-04-03').find(
+      (entry) => entry.id === 'actual-2026-04-03-photo-library',
+    );
+    const casablancaMoment = getActualMomentsForDate('2026-04-04').find(
+      (entry) => entry.id === 'actual-2026-04-04-photo-library',
+    );
 
     expect(lisbonWalkMoment?.text.toLowerCase()).toContain('lisbon');
     expect(lisbonWalkMoment?.photos).toHaveLength(4);
@@ -202,6 +218,34 @@ describe('actual moments seed data', () => {
     expect(marrakechFoothillsMoment?.photos).toHaveLength(5);
     expect(marrakechFoothillsMoment?.videos).toHaveLength(3);
     expect(marrakechFoothillsMoment?.videos?.[0]?.caption.toLowerCase()).toContain('dinner-show');
+
+    expect(fezArrivalMoment?.text.toLowerCase()).toContain('fez');
+    expect(fezArrivalMoment?.photos).toHaveLength(5);
+    expect(fezArrivalMoment?.text.toLowerCase()).toContain('curio');
+
+    expect(fezMoment?.text.toLowerCase()).toContain('medina');
+    expect(fezMoment?.photos).toHaveLength(9);
+    expect(fezMoment?.photos.some((photo) => photo.caption.toLowerCase().includes('royal palace'))).toBe(true);
+
+    expect(volubilisMoment?.text.toLowerCase()).toContain('volubilis');
+    expect(volubilisMoment?.photos).toHaveLength(13);
+    expect(volubilisMoment?.videos).toHaveLength(1);
+    expect(volubilisMoment?.videos?.[0]?.caption.toLowerCase()).toContain('meknes');
+
+    expect(chefchaouenMoment?.text.toLowerCase()).toContain('rif');
+    expect(chefchaouenMoment?.photos).toHaveLength(13);
+    expect(chefchaouenMoment?.videos).toHaveLength(1);
+    expect(chefchaouenMoment?.videos?.[0]?.caption.toLowerCase()).toContain('chefchaouen');
+
+    expect(tangierMoment?.text.toLowerCase()).toContain('cap spartel');
+    expect(tangierMoment?.photos).toHaveLength(11);
+    expect(tangierMoment?.videos).toHaveLength(2);
+    expect(tangierMoment?.videos?.[1]?.caption.toLowerCase()).toContain('ferry');
+
+    expect(casablancaMoment?.text.toLowerCase()).toContain('high-speed train');
+    expect(casablancaMoment?.photos).toHaveLength(9);
+    expect(casablancaMoment?.videos).toHaveLength(1);
+    expect(casablancaMoment?.videos?.[0]?.caption.toLowerCase()).toContain('casablanca hotel');
   });
 
   it('maps the Istanbul travelogue across March 2 through March 6', () => {

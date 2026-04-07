@@ -22,6 +22,8 @@ interface VideoSeed {
   poster?: string;
 }
 
+type ImportedVideoEntry = readonly [originalName: string, caption: string];
+
 function formatGps(lat: number | undefined, lng: number | undefined): string {
   if (typeof lat !== 'number' || typeof lng !== 'number') return '';
   return ` | GPS ${lat.toFixed(6)}, ${lng.toFixed(6)}`;
@@ -64,9 +66,70 @@ function buildPhotoMoment(
     source: PHOTO_LIBRARY_SOURCE,
     whenLabel,
     text,
-    photos: [...seeds].sort((left, right) => right.capturedAt.localeCompare(left.capturedAt)).map(buildPhoto),
+    photos: [...seeds]
+      .map((seed, index) => ({ seed, index }))
+      .sort((left, right) => {
+        const capturedAtCompare = right.seed.capturedAt.localeCompare(left.seed.capturedAt);
+        return capturedAtCompare || left.index - right.index;
+      })
+      .map(({ seed }) => buildPhoto(seed)),
     videos: videoSeeds.map(buildVideo),
   };
+}
+
+function sequenceText(base: string, index: number, total: number): string {
+  if (total <= 1) return `${base}.`;
+  return `${base}, photo ${index + 1}.`;
+}
+
+function extensionFromFileName(fileName: string, fallback: string): string {
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : fallback;
+}
+
+function buildImportedPhotoSeries(
+  date: string,
+  slug: string,
+  label: string,
+  altBase: string,
+  captionBase: string,
+  originalNames: readonly string[],
+): PhotoSeed[] {
+  const total = originalNames.length;
+
+  return originalNames.map((originalName, index) => {
+    const sequence = String(index + 1).padStart(2, '0');
+    const extension = extensionFromFileName(originalName, '.jpeg');
+
+    return {
+      id: `actual-photo-${date}-${slug}-${sequence}`,
+      src: `/actuals/mom-${date}-${slug}-photo-${sequence}${extension}`,
+      originalName,
+      capturedAt: '',
+      label,
+      alt: sequenceText(altBase, index, total),
+      caption: sequenceText(captionBase, index, total),
+    };
+  });
+}
+
+function buildImportedVideoSeries(
+  date: string,
+  slug: string,
+  entries: readonly ImportedVideoEntry[],
+): VideoSeed[] {
+  return entries.map(([originalName, caption], index) => {
+    const sequence = String(index + 1).padStart(2, '0');
+    const extension = extensionFromFileName(originalName, '.mov');
+    const baseName = `/actuals/mom-${date}-${slug}-video-${sequence}`;
+
+    return {
+      id: `actual-video-${date}-${slug}-${sequence}`,
+      src: `${baseName}${extension}`,
+      poster: `${baseName}-poster.png`,
+      caption,
+    };
+  });
 }
 
 const PHOTO_SEEDS_BY_DATE: Record<string, PhotoSeed[]> = {
@@ -1353,6 +1416,161 @@ const PHOTO_SEEDS_BY_DATE: Record<string, PhotoSeed[]> = {
       lng: -7.96536,
     },
   ],
+  '2026-03-27': buildImportedPhotoSeries(
+    '2026-03-27',
+    'atlas',
+    'Atlas Mountains photo from March 27, 2026',
+    'Atlas Mountains arrival scene at Kasbah Tamadot',
+    'Arrival scene at Kasbah Tamadot in the Atlas Mountains',
+    [
+      'IMG_1901.jpeg',
+      'IMG_1902.jpeg',
+      'IMG_1903.jpeg',
+      'IMG_1904.jpeg',
+      'IMG_1905.jpeg',
+      'IMG_1906.jpeg',
+      'IMG_1910.jpeg',
+      'IMG_1911.jpeg',
+      'IMG_1912.jpeg',
+      'IMG_1913.jpeg',
+      'IMG_1914.jpeg',
+      'IMG_4401.jpeg',
+    ],
+  ),
+  '2026-03-28': buildImportedPhotoSeries(
+    '2026-03-28',
+    'atlas',
+    'Atlas Mountains photo from March 28, 2026',
+    'Atlas Mountains terrace and village scene',
+    'Terrace and village scene from the Atlas Mountains day',
+    [
+      '79637563707__C5D31A74-7B20-4B29-A4B2-18C56C2DFC92.jpeg',
+      '79638198957__387F9952-753B-446F-A14A-590A487CDA12.jpeg',
+      '79638201667__5C244A8E-88CA-4E61-B9C3-8740F5D01289.jpeg',
+      '79638205363__300469EB-90B5-476F-9998-0E17EDACA647.jpeg',
+      'IMG_0990.jpeg',
+      'IMG_0998.jpeg',
+      'IMG_1002.jpeg',
+      'IMG_1003.jpeg',
+      'IMG_1925.jpeg',
+      'IMG_4484.jpeg',
+      'IMG_4861.jpeg',
+    ],
+  ),
+  '2026-03-29': buildImportedPhotoSeries(
+    '2026-03-29',
+    'fez',
+    'Fez travel-day photo from March 29, 2026',
+    'Fez arrival and roadside scene',
+    'Fez arrival and roadside scene from the travel day',
+    [
+      '79648652045__23D781D6-4FDE-49C5-AB06-7D1C92120C3D.jpeg',
+      'IMG_1930.jpeg',
+      'IMG_1935.jpeg',
+      'IMG_1937.jpeg',
+      'IMG_1939.jpeg',
+    ],
+  ),
+  '2026-03-30': buildImportedPhotoSeries(
+    '2026-03-30',
+    'fez',
+    'Fez photo from March 30, 2026',
+    'Fez medina and royal palace detail',
+    'Medina and royal palace detail from the Fez day',
+    [
+      'IMG_1949.jpeg',
+      'IMG_1958.jpeg',
+      'IMG_1959.jpeg',
+      'IMG_1961.jpeg',
+      'IMG_1965.jpeg',
+      'IMG_1967.jpeg',
+      'IMG_1968.jpeg',
+      'IMG_1971.jpeg',
+      'IMG_4865.jpeg',
+    ],
+  ),
+  '2026-03-31': buildImportedPhotoSeries(
+    '2026-03-31',
+    'volubilis',
+    'Volubilis and Meknes photo from March 31, 2026',
+    'Volubilis, Meknes, and countryside excursion scene',
+    'Excursion scene from Volubilis, Meknes, and the spring countryside',
+    [
+      'IMG_1978.jpeg',
+      'IMG_1981.jpeg',
+      'IMG_1984.jpeg',
+      'IMG_1986.jpeg',
+      'IMG_1987.jpeg',
+      'IMG_1992.jpeg',
+      'IMG_1994.jpeg',
+      'IMG_1995.jpeg',
+      'IMG_1996.jpeg',
+      'IMG_1997.jpeg',
+      'IMG_1998.jpeg',
+      'IMG_1999.jpeg',
+      'IMG_2004.jpeg',
+    ],
+  ),
+  '2026-04-01': buildImportedPhotoSeries(
+    '2026-04-01',
+    'chefchaouen',
+    'Chefchaouen photo from April 1, 2026',
+    'Rif Mountains and Chefchaouen arrival scene',
+    'Rif Mountains and Chefchaouen arrival scene',
+    [
+      'IMG_2008.jpeg',
+      'IMG_2009.jpeg',
+      'IMG_2010.jpeg',
+      'IMG_2011.jpeg',
+      'IMG_2022.jpeg',
+      'IMG_2026.jpeg',
+      'IMG_2027.jpeg',
+      'IMG_2031.jpeg',
+      'IMG_2035.jpeg',
+      'IMG_2036.jpeg',
+      'IMG_2040.jpeg',
+      'IMG_2041.jpeg',
+      'IMG_2043.jpeg',
+    ],
+  ),
+  '2026-04-03': buildImportedPhotoSeries(
+    '2026-04-03',
+    'tangier',
+    'Tangier photo from April 3, 2026',
+    'Tangier, Cap Spartel, and harbor scene',
+    'Tangier, Cap Spartel, and harbor scene',
+    [
+      'IMG_2059.jpeg',
+      'IMG_2060.jpeg',
+      'IMG_2063.jpeg',
+      'IMG_2073.jpeg',
+      'IMG_2074.jpeg',
+      'IMG_2075.jpeg',
+      'IMG_2076.jpeg',
+      'IMG_2077.jpeg',
+      'IMG_2081.jpeg',
+      'IMG_2083.jpeg',
+      'IMG_2085.jpeg',
+    ],
+  ),
+  '2026-04-04': buildImportedPhotoSeries(
+    '2026-04-04',
+    'casablanca',
+    'Casablanca photo from April 4, 2026',
+    'Casablanca finale with mosque and city scene',
+    'Finale-day scene from Casablanca',
+    [
+      'IMG_1135.jpeg',
+      'IMG_2095.jpeg',
+      'IMG_2096.jpeg',
+      'IMG_2097.jpeg',
+      'IMG_2100.jpeg',
+      'IMG_2110.jpeg',
+      'IMG_2111.jpeg',
+      'IMG_2137.jpeg',
+      'IMG_4499.png',
+    ],
+  ),
 };
 
 const VIDEO_SEEDS_BY_DATE: Record<string, VideoSeed[]> = {
@@ -1460,6 +1678,42 @@ const VIDEO_SEEDS_BY_DATE: Record<string, VideoSeed[]> = {
       caption: 'Fire performance during the Marrakech dinner show.',
     },
   ],
+  '2026-03-27': buildImportedVideoSeries(
+    '2026-03-27',
+    'atlas',
+    [
+      ['IMG_1922.mov', 'Valley view from the terrace at Kasbah Tamadot.'],
+    ],
+  ),
+  '2026-03-31': buildImportedVideoSeries(
+    '2026-03-31',
+    'volubilis',
+    [
+      ['IMG_1980.mov', 'Green farmland and valley view between Volubilis and Meknes.'],
+    ],
+  ),
+  '2026-04-01': buildImportedVideoSeries(
+    '2026-04-01',
+    'chefchaouen',
+    [
+      ['IMG_2030.mov', 'Rushing stream along the Rif Mountains road into Chefchaouen.'],
+    ],
+  ),
+  '2026-04-03': buildImportedVideoSeries(
+    '2026-04-03',
+    'tangier',
+    [
+      ['IMG_2062.mov', 'Cap Spartel cliffs where the Atlantic meets the Mediterranean.'],
+      ['IMG_2082.mov', 'Fast ferry moving through Tangier harbor.'],
+    ],
+  ),
+  '2026-04-04': buildImportedVideoSeries(
+    '2026-04-04',
+    'casablanca',
+    [
+      ['IMG_2113.mov', 'Last-night neighborhood view from the Casablanca hotel.'],
+    ],
+  ),
 };
 
 export const PHOTO_LIBRARY_ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMoment[]> = {
@@ -1668,6 +1922,75 @@ export const PHOTO_LIBRARY_ACTUAL_MOMENTS_BY_DATE: Record<string, TripActualMome
       'This set covers a quiet Marrakech morning, the wildflower-and-Atlas outing, and the full dinner-show sequence from the evening.',
       PHOTO_SEEDS_BY_DATE['2026-03-26'],
       VIDEO_SEEDS_BY_DATE['2026-03-26'],
+    ),
+  ],
+  '2026-03-27': [
+    buildPhotoMoment(
+      '2026-03-27',
+      'Fri, Mar 27 - Atlas Mountains arrival photo set',
+      'Arrival at Kasbah Tamadot, with cactus gardens, terracotta arches, and long valley views introducing the final mountain chapter.',
+      PHOTO_SEEDS_BY_DATE['2026-03-27'],
+      VIDEO_SEEDS_BY_DATE['2026-03-27'],
+    ),
+  ],
+  '2026-03-28': [
+    buildPhotoMoment(
+      '2026-03-28',
+      'Sat, Mar 28 - Atlas Mountains photo set',
+      'A second Atlas day with terrace views, workshop details, and green valley scenes around the mountain stay.',
+      PHOTO_SEEDS_BY_DATE['2026-03-28'],
+    ),
+  ],
+  '2026-03-29': [
+    buildPhotoMoment(
+      '2026-03-29',
+      'Sun, Mar 29 - Fez arrival photo set',
+      'Arrival in Fez, from the first excited city note and roadside fields to the old-city approach and the joking fez-curio debate.',
+      PHOTO_SEEDS_BY_DATE['2026-03-29'],
+    ),
+  ],
+  '2026-03-30': [
+    buildPhotoMoment(
+      '2026-03-30',
+      'Mon, Mar 30 - Fez photo set',
+      'A Fez day of medina lanes, royal-palace glimpses, lunch, and a small-script purchase that read like a keepsake blessing.',
+      PHOTO_SEEDS_BY_DATE['2026-03-30'],
+    ),
+  ],
+  '2026-03-31': [
+    buildPhotoMoment(
+      '2026-03-31',
+      'Tue, Mar 31 - Volubilis and Meknes photo set',
+      'Verdant farmland outside Fez gives way to Volubilis, Meknes gates and Bab Mansour, a winery lunch at Chateau Roslane, and one more sweep of green countryside.',
+      PHOTO_SEEDS_BY_DATE['2026-03-31'],
+      VIDEO_SEEDS_BY_DATE['2026-03-31'],
+    ),
+  ],
+  '2026-04-01': [
+    buildPhotoMoment(
+      '2026-04-01',
+      'Wed, Apr 1 - Rif Mountains and Chefchaouen photo set',
+      'The road bends into the Rif Mountains toward the Mediterranean coast, ending with streamside views, room glimpses, and a quieter Chefchaouen arrival.',
+      PHOTO_SEEDS_BY_DATE['2026-04-01'],
+      VIDEO_SEEDS_BY_DATE['2026-04-01'],
+    ),
+  ],
+  '2026-04-03': [
+    buildPhotoMoment(
+      '2026-04-03',
+      'Fri, Apr 3 - Tangier and Cap Spartel photo set',
+      'Cap Spartel, where the Atlantic and Mediterranean meet, gives way to harbor traffic, the ferry note, and a lovely Tangier evening complete with the Fruit Loops joke.',
+      PHOTO_SEEDS_BY_DATE['2026-04-03'],
+      VIDEO_SEEDS_BY_DATE['2026-04-03'],
+    ),
+  ],
+  '2026-04-04': [
+    buildPhotoMoment(
+      '2026-04-04',
+      'Sat, Apr 4 - Casablanca finale photo set',
+      'The final full day moves by high-speed train from Tanger to Casablanca, then through beachside lunch, the Grand Mosque, an Art Deco hotel foyer, and the last-night city view before home.',
+      PHOTO_SEEDS_BY_DATE['2026-04-04'],
+      VIDEO_SEEDS_BY_DATE['2026-04-04'],
     ),
   ],
 };

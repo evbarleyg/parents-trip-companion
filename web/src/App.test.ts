@@ -98,27 +98,64 @@ describe('App one-page workspace', () => {
     expect(container.textContent).not.toContain('Location confidence');
     expect(container.querySelectorAll('select')).toHaveLength(0);
     expect(container.querySelector('.toolbar-popover')).toBeNull();
-    expect(getTestElement(container, 'header-day-picker')).toBeTruthy();
+    expect(getTestElement(container, 'hero-current-day')).toBeTruthy();
   });
 
-  it('renders the compact one-page layout with the map before story and media', () => {
+  it('renders the compact one-page layout with the day rail before the map and story/media below it', () => {
     expect(container.querySelector('[data-testid="trip-rail"]')).toBeNull();
     expect(container.querySelector('[data-testid="mobile-trip-nav"]')).toBeNull();
 
     const daySummary = getTestElement(container, 'day-summary-strip');
+    const dayFocusRail = getTestElement(container, 'day-focus-rail');
     const mapCard = getTestElement(container, 'map-card');
     const dayTimeline = getTestElement(container, 'day-timeline-card');
     const tripUpdates = getTestElement(container, 'trip-updates-card');
     const tripMedia = getTestElement(container, 'trip-media-card');
 
-    expect(daySummary.compareDocumentPosition(mapCard)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(daySummary.compareDocumentPosition(dayFocusRail)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(dayFocusRail.compareDocumentPosition(mapCard)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(mapCard.compareDocumentPosition(dayTimeline)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(dayTimeline.compareDocumentPosition(tripUpdates)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(mapCard.compareDocumentPosition(tripMedia)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(container.textContent).toContain('Trip Updates');
-    expect(container.textContent).toContain('Trip Media');
-    expect(container.textContent).toContain('Map');
+    expect(container.textContent).toContain('Postcards & Notes');
+    expect(container.textContent).toContain('Collected Moments');
+    expect(container.textContent).toContain('The Route They Traced');
     expect(getTestElement(container, 'section-jump-row')).toBeTruthy();
+  });
+
+  it('opens chapters from the stats area and keeps the completed trip focused on memory-page media', async () => {
+    const chapterButton = Array.from(container.querySelectorAll('.hero-stat-button')).find((button) =>
+      button.textContent?.includes('Chapters'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(chapterButton).toBeTruthy();
+    expect(container.querySelector('[data-testid="chapter-menu"]')).toBeNull();
+    expect(findButtonByText(container, 'Final day')).toBeUndefined();
+    expect(
+      (container.querySelector('.media-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
+    ).toContain('Memory Page');
+    expect(container.querySelector('[aria-label="Next spotlight media"]')).toBeTruthy();
+
+    await act(async () => {
+      chapterButton?.click();
+      await flushEffects();
+    });
+
+    const chapterMenu = getTestElement(container, 'chapter-menu');
+    const chapterChoice = chapterMenu.querySelector('.chapter-button') as HTMLButtonElement | null;
+
+    expect(chapterMenu).toBeTruthy();
+    expect(chapterChoice).toBeTruthy();
+
+    await act(async () => {
+      chapterChoice?.click();
+      await flushEffects();
+    });
+
+    expect(
+      (container.querySelector('.media-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
+    ).toContain('Chapter');
+    expect(container.querySelector('.trip-media-context')?.textContent).toContain('across');
   });
 });
 
@@ -152,21 +189,15 @@ describe('App mobile workspace', () => {
     (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
-  it('uses the same compact header picker on mobile', async () => {
-    const picker = getTestElement(container, 'header-day-picker');
-
-    expect(picker).toBeTruthy();
+  it('uses the same date rail and compact hero controls on mobile', async () => {
+    expect(getTestElement(container, 'hero-current-day')).toBeTruthy();
+    expect(getTestElement(container, 'day-focus-rail')).toBeTruthy();
     expect(container.querySelector('[data-testid="mobile-trip-nav"]')).toBeNull();
     expect(container.querySelector('[data-testid="trip-rail"]')).toBeNull();
 
-    await act(async () => {
-      picker.setAttribute('open', '');
-      await flushEffects();
-    });
-
-    expect(picker.textContent).toContain('Today');
-    expect(container.textContent).toContain('Trip Media');
-    expect(container.textContent).toContain('Map');
+    expect(findButtonByText(container, 'Final day')).toBeUndefined();
+    expect(container.textContent).toContain('Collected Moments');
+    expect(container.textContent).toContain('The Route They Traced');
   });
 });
 

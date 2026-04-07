@@ -4,6 +4,13 @@ coverage
 .vite
 .wrangler
 .DS_Store
+.venv/
+tmp/
 .env
 .env.*
 !.env.example
+content/photo-inbox/
+content/imessage transcripst/
+content/Instabul Pics/
+docs/photo-date-alignment-review.md
+docs/photo-dedupe-review.md
