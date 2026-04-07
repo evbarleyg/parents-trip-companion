@@ -1,6 +1,6 @@
 import type { AppViewTab, MobilePanel } from '../types';
 
-export type MapScope = 'day' | 'trip';
+export type MapScope = 'day' | 'chapter' | 'trip';
 
 export const APP_VIEW_TABS: AppViewTab[] = ['trip_overview', 'day_detail', 'photo_gallery'];
 export const MOBILE_PANELS: MobilePanel[] = ['map', 'plan'];
@@ -9,7 +9,7 @@ export const MAP_SCOPE_BY_TAB: Record<AppViewTab, MapScope> = {
   day_detail: 'day',
   photo_gallery: 'day',
 } as const;
-export const MAP_SCOPES: MapScope[] = ['trip', 'day'];
+export const MAP_SCOPES: MapScope[] = ['trip', 'chapter', 'day'];
 
 type MapScopeResolverOptions = {
   fallback?: MapScope;

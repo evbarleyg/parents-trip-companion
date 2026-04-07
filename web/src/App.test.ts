@@ -58,6 +58,21 @@ function getTestElement(container: HTMLElement, testId: string): HTMLElement {
   return element as HTMLElement;
 }
 
+function findMediaRichChapter(container: HTMLElement): HTMLButtonElement | undefined {
+  const preferredLabels = [
+    'Morocco - Tangier',
+    'Istanbul',
+    'Oman - Nizwa / Muscat',
+    'Portugal - Lisbon',
+  ];
+
+  return preferredLabels
+    .map((label) =>
+      Array.from(container.querySelectorAll('.chapter-button')).find((button) => button.textContent?.includes(label)),
+    )
+    .find(Boolean) as HTMLButtonElement | undefined;
+}
+
 describe('App one-page workspace', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -141,14 +156,25 @@ describe('App one-page workspace', () => {
       await flushEffects();
     });
 
-    const chapterMenu = getTestElement(container, 'chapter-menu');
-    const chapterChoice = chapterMenu.querySelector('.chapter-button') as HTMLButtonElement | null;
-
-    expect(chapterMenu).toBeTruthy();
-    expect(chapterChoice).toBeTruthy();
+    expect(getTestElement(container, 'chapter-menu-backdrop')).toBeTruthy();
+    expect(getTestElement(container, 'chapter-menu')).toBeTruthy();
+    expect(getTestElement(container, 'hero-thumbnail-rail')).toBeTruthy();
 
     await act(async () => {
-      chapterChoice?.click();
+      (getTestElement(container, 'chapter-menu-backdrop') as HTMLButtonElement).click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      (container.querySelector('.hero-thumbnail') as HTMLButtonElement | null)?.click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      const chapterScopeButton = Array.from(container.querySelectorAll('.media-scope-toggle button')).find((button) =>
+        button.textContent?.includes('Chapter'),
+      ) as HTMLButtonElement | undefined;
+      chapterScopeButton?.click();
       await flushEffects();
     });
 
@@ -156,6 +182,94 @@ describe('App one-page workspace', () => {
       (container.querySelector('.media-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
     ).toContain('Chapter');
     expect(container.querySelector('.trip-media-context')?.textContent).toContain('across');
+    expect(getTestElement(container, 'chapter-gallery')).toBeTruthy();
+  });
+
+  it('closes the chapter chooser on escape and lets a chapter gallery jump back to a single day', async () => {
+    const chapterButton = Array.from(container.querySelectorAll('.hero-stat-button')).find((button) =>
+      button.textContent?.includes('Chapters'),
+    ) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+      chapterButton?.click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushEffects();
+    });
+
+    expect(container.querySelector('[data-testid="chapter-menu"]')).toBeNull();
+    expect(container.querySelector('[data-testid="chapter-menu-backdrop"]')).toBeNull();
+
+    await act(async () => {
+      chapterButton?.click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      (getTestElement(container, 'chapter-menu-backdrop') as HTMLButtonElement).click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      (container.querySelector('.hero-thumbnail') as HTMLButtonElement | null)?.click();
+      await flushEffects();
+    });
+
+    await act(async () => {
+      const chapterScopeButton = Array.from(container.querySelectorAll('.media-scope-toggle button')).find((button) =>
+        button.textContent?.includes('Chapter'),
+      ) as HTMLButtonElement | undefined;
+      chapterScopeButton?.click();
+      await flushEffects();
+    });
+
+    expect(getTestElement(container, 'chapter-gallery')).toBeTruthy();
+    const openDayButton = findButtonByText(container, 'Open day');
+
+    expect(openDayButton?.textContent).toBe('Open day');
+
+    await act(async () => {
+      openDayButton?.click();
+      await flushEffects();
+    });
+
+    expect(
+      (container.querySelector('.media-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
+    ).toContain('Memory Page');
+    expect(
+      (container.querySelector('.map-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
+    ).toContain('Day');
+    expect(container.querySelector('[data-testid="chapter-gallery"]')).toBeNull();
+  });
+
+  it('marks the selected date and supports keyboard-driven media viewing', async () => {
+    expect(container.querySelector('.day-focus-button[aria-current="date"]')).toBeTruthy();
+
+    const heroLaunch = getTestElement(container, 'hero-visual-launch') as HTMLButtonElement;
+
+    await act(async () => {
+      heroLaunch.click();
+      await flushEffects();
+    });
+
+    expect(getTestElement(container, 'media-viewer')).toBeTruthy();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      await flushEffects();
+    });
+
+    expect(getTestElement(container, 'media-viewer')).toBeTruthy();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      await flushEffects();
+    });
+
+    expect(container.querySelector('[data-testid="media-viewer"]')).toBeNull();
   });
 });
 

@@ -22,6 +22,7 @@ describe('view state resolvers', () => {
 
   it('resolves map scope with fallback', () => {
     expect(resolveMapScope('trip')).toBe('trip');
+    expect(resolveMapScope('chapter')).toBe('chapter');
     expect(resolveMapScope('day')).toBe('day');
     expect(resolveMapScope('full')).toBe('trip');
   });

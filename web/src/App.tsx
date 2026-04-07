@@ -46,7 +46,8 @@ type LeafletModule = typeof import('leaflet');
 
 const MAP_SCOPE_LABEL: Record<MapScope, string> = {
   day: 'Day',
-  trip: 'Trip',
+  chapter: 'Chapter',
+  trip: 'Journey',
 };
 
 interface RegionSegment {
@@ -93,12 +94,28 @@ interface SelectDateOptions {
 
 interface SpotlightMediaItem {
   id: string;
+  lookupKey: string;
   src: string;
+  assetSrc?: string;
   alt: string;
   caption: string | null;
   date: string;
   region: string;
   kind: 'photo' | 'video';
+  poster?: string;
+}
+
+interface ChapterGalleryDay {
+  date: string;
+  region: string;
+  summary: string;
+  mediaItems: SpotlightMediaItem[];
+}
+
+interface MediaViewerState {
+  items: SpotlightMediaItem[];
+  index: number;
+  label: string;
 }
 
 const REMOVED_PHOTO_FILE_MARKERS = ['img_4017.jpeg', 'img_4024.jpeg', 'img_4041.jpeg'];
@@ -166,7 +183,74 @@ function previewText(text: string, maxLength = 220): string {
   const sentenceWithinLimit = normalized.match(new RegExp(`^(.{0,${maxLength}}[.!?])(?=\\s|$)`));
   if (sentenceWithinLimit?.[1]) return sentenceWithinLimit[1];
 
-  return `${normalized.slice(0, maxLength).trimEnd()}...`;
+  return `${normalized.slice(0, maxLength).trimEnd()}…`;
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function storylineForDay(day: TripDay): string {
+  const moments = day.actualMoments || [];
+  const leadNarrative = firstMeaningfulMomentText(moments);
+  if (leadNarrative) return leadNarrative;
+
+  const items = getActiveItems(day);
+  if (items.length === 0) {
+    return `A quieter page in the archive, anchored in ${day.region}.`;
+  }
+
+  const firstItem = items[0];
+  const lastItem = items[items.length - 1];
+  if (firstItem.id === lastItem.id) {
+    return `This day centered on ${firstItem.title} in ${day.region}.`;
+  }
+
+  return `This day opened with ${firstItem.title} and carried through to ${lastItem.title}.`;
+}
+
+function momentRowsToSpotlightItems(
+  rows: ActualMomentRow[],
+  days: TripDay[],
+  fallbackRegion: string,
+): SpotlightMediaItem[] {
+  const regionByDate = new Map(days.map((day) => [day.date, day.region]));
+
+  return rows.flatMap((row) => {
+    const region = regionByDate.get(row.date) || fallbackRegion;
+    const photoItems = row.moment.photos.map((photo) => ({
+      id: photo.id,
+      lookupKey: `${row.date}:${photo.id}`,
+      src: canonicalPhotoSrc(photo.src),
+      assetSrc: canonicalPhotoSrc(photo.src),
+      alt: photo.alt,
+      caption: mediaDisplayCaption(photo.caption, photo.alt),
+      date: row.date,
+      region,
+      kind: 'photo' as const,
+    }));
+    const videoItems = (row.moment.videos || []).flatMap((video) =>
+      video.poster
+        ? [
+            {
+              id: video.id,
+              lookupKey: `${row.date}:${video.id}`,
+              src: video.poster,
+              assetSrc: video.src,
+              alt: `Poster frame from ${formatDateLabel(row.date)} in ${region}.`,
+              caption: mediaDisplayCaption(video.caption, undefined),
+              date: row.date,
+              region,
+              kind: 'video' as const,
+              poster: video.poster,
+            },
+          ]
+        : [],
+    );
+
+    return [...photoItems, ...videoItems];
+  });
 }
 
 function tripPhaseForPlan(plan: Pick<TripPlan, 'startDate' | 'endDate' | 'timezone'>, now = new Date()): TripPhase {
@@ -209,7 +293,7 @@ function anchorLabelForPhase(phase: TripPhase): string {
 }
 
 function mapScopeStopLimit(scope: MapScope): number {
-  return scope === 'trip' ? 20 : 12;
+  return scope === 'trip' ? 20 : scope === 'chapter' ? 16 : 12;
 }
 
 function isJsdomEnvironment(): boolean {
@@ -675,6 +759,7 @@ export function App() {
   );
   const [heroMediaIndex, setHeroMediaIndex] = useState(0);
   const [chapterMenuOpen, setChapterMenuOpen] = useState(false);
+  const [mediaViewer, setMediaViewer] = useState<MediaViewerState | null>(null);
   const mapStyle = 'hybrid';
   const [isMobile, setIsMobile] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -706,9 +791,18 @@ export function App() {
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapCardRef = useRef<HTMLElement | null>(null);
   const tripMediaRef = useRef<HTMLElement | null>(null);
+  const chapterMenuRef = useRef<HTMLElement | null>(null);
+  const chapterMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const chapterMenuCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dayFocusButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const spotlightThumbRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const viewerCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const viewerLastFocusedElementRef = useRef<HTMLElement | null>(null);
+  const mediaViewerRef = useRef<MediaViewerState | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const hasAppliedInitialRegionLockRef = useRef(false);
   const lastViewportFitKeyRef = useRef<string | null>(null);
+  const lastActiveSpotlightKeyRef = useRef<string | null>(null);
 
   const selectedDay = useMemo(
     () => tripPlan.days.find((day) => day.date === selectedDate) || tripPlan.days[0],
@@ -785,15 +879,19 @@ export function App() {
     [selectedDayPhotoRows],
   );
   const selectedChapterPhotoRows = useMemo(
-    () =>
-      sortActualMomentRowsDescending(
+    () => {
+      const sortedRows = sortActualMomentRowsDescending(
         selectedSegmentDays.flatMap((day) =>
           (day.actualMoments || [])
             .filter((moment) => hasMomentMedia(moment))
             .map((moment) => ({ date: day.date, moment })),
         ),
-      ),
-    [selectedSegmentDays],
+      );
+      const selectedRows = sortedRows.filter((row) => row.date === selectedDate);
+      if (selectedRows.length === 0) return sortedRows;
+      return [...selectedRows, ...sortedRows.filter((row) => row.date !== selectedDate)];
+    },
+    [selectedDate, selectedSegmentDays],
   );
   const visiblePhotoRows = useMemo(
     () =>
@@ -844,6 +942,12 @@ export function App() {
     [tripPlan.days],
   );
   const totalMediaCount = totalPhotoCount + totalVideoCount;
+  const spotlightMediaCount =
+    photoScope === 'selected_chapter'
+      ? selectedChapterMediaCount
+      : photoScope === 'full_trip'
+        ? totalMediaCount
+        : selectedDayMediaCount;
   const totalStopCount = useMemo(
     () =>
       tripPlan.days.reduce((count, day) => {
@@ -860,24 +964,7 @@ export function App() {
     () => Math.max(0, regionSegments.findIndex((segment) => segment.id === selectedRegionSegment?.id)),
     [regionSegments, selectedRegionSegment?.id],
   );
-  const selectedLeadNarrative = useMemo(
-    () => firstMeaningfulMomentText(selectedActualMoments) || selectedDayAnnotations[0]?.text || null,
-    [selectedActualMoments, selectedDayAnnotations],
-  );
-  const selectedDayStoryline = useMemo(() => {
-    if (selectedLeadNarrative) return selectedLeadNarrative;
-    if (selectedItems.length === 0) {
-      return `A quieter page in the archive, anchored in ${selectedDay.region}.`;
-    }
-
-    const firstItem = selectedItems[0];
-    const lastItem = selectedItems[selectedItems.length - 1];
-    if (firstItem.id === lastItem.id) {
-      return `This day centered on ${firstItem.title} in ${selectedDay.region}.`;
-    }
-
-    return `This day opened with ${firstItem.title} and carried through to ${lastItem.title}.`;
-  }, [selectedDay.region, selectedItems, selectedLeadNarrative]);
+  const selectedDayStoryline = useMemo(() => storylineForDay(selectedDay), [selectedDay]);
   const selectedDayStorylinePreview = useMemo(() => previewText(selectedDayStoryline), [selectedDayStoryline]);
   const selectedPlanSummary = useMemo(() => {
     if (selectedItems.length === 0) return 'No itinerary details were preserved for this day.';
@@ -897,55 +984,49 @@ export function App() {
     [todayDate, tripPhase, tripPlan],
   );
   const jumpAnchorLabel = useMemo(() => anchorLabelForPhase(tripPhase), [tripPhase]);
+  const chapterGalleryDays = useMemo<ChapterGalleryDay[]>(
+    () => {
+      const days = selectedSegmentDays
+        .map((day) => {
+          const mediaRows = sortActualMomentRowsDescending(
+            (day.actualMoments || [])
+              .filter((moment) => hasMomentMedia(moment))
+              .map((moment) => ({ date: day.date, moment })),
+          );
+
+          return {
+            date: day.date,
+            region: day.region,
+            summary: previewText(storylineForDay(day), 160),
+            mediaItems: momentRowsToSpotlightItems(mediaRows, tripPlan.days, day.region),
+          };
+        })
+        .filter((day) => day.mediaItems.length > 0);
+
+      const selectedDayCard = days.find((day) => day.date === selectedDate);
+      if (!selectedDayCard) return days;
+      return [selectedDayCard, ...days.filter((day) => day.date !== selectedDate)];
+    },
+    [selectedDate, selectedSegmentDays, tripPlan.days],
+  );
   const spotlightItems = useMemo<SpotlightMediaItem[]>(() => {
-    const rowsToItems = (rows: ActualMomentRow[]): SpotlightMediaItem[] =>
-      rows.flatMap((row) => {
-        const region = tripPlan.days.find((day) => day.date === row.date)?.region || selectedDay.region;
-        const photoItems = row.moment.photos.map((photo) => ({
-          id: photo.id,
-          src: canonicalPhotoSrc(photo.src),
-          alt: photo.alt,
-          caption: mediaDisplayCaption(photo.caption, photo.alt),
-          date: row.date,
-          region,
-          kind: 'photo' as const,
-        }));
-        const videoItems = (row.moment.videos || []).flatMap((video) =>
-          video.poster
-            ? [
-                {
-                  id: video.id,
-                  src: video.poster,
-                  alt: `Poster frame from ${formatDateLabel(row.date)} in ${region}.`,
-                  caption: mediaDisplayCaption(video.caption, undefined),
-                  date: row.date,
-                  region,
-                  kind: 'video' as const,
-                },
-              ]
-            : [],
-        );
-
-        return [...photoItems, ...videoItems];
-      });
-
     if (photoScope === 'selected_day') {
-      const dayItems = rowsToItems(selectedDayPhotoRows);
+      const dayItems = momentRowsToSpotlightItems(selectedDayPhotoRows, tripPlan.days, selectedDay.region);
       if (dayItems.length > 0) return dayItems;
     }
 
     if (photoScope === 'selected_chapter') {
-      const chapterItems = rowsToItems(selectedChapterPhotoRows);
+      const chapterItems = momentRowsToSpotlightItems(selectedChapterPhotoRows, tripPlan.days, selectedDay.region);
       if (chapterItems.length > 0) return chapterItems;
     }
 
-    const dayItems = rowsToItems(selectedDayPhotoRows);
+    const dayItems = momentRowsToSpotlightItems(selectedDayPhotoRows, tripPlan.days, selectedDay.region);
     if (dayItems.length > 0) return dayItems;
 
-    const chapterItems = rowsToItems(selectedChapterPhotoRows);
+    const chapterItems = momentRowsToSpotlightItems(selectedChapterPhotoRows, tripPlan.days, selectedDay.region);
     if (chapterItems.length > 0) return chapterItems;
 
-    return rowsToItems(fullTripPhotoRows);
+    return momentRowsToSpotlightItems(fullTripPhotoRows, tripPlan.days, selectedDay.region);
   }, [fullTripPhotoRows, photoScope, selectedChapterPhotoRows, selectedDay.region, selectedDayPhotoRows, tripPlan.days]);
   const spotlightScopeLabel = useMemo(() => {
     if (photoScope === 'selected_chapter' && selectedRegionSegment) {
@@ -956,6 +1037,43 @@ export function App() {
     if (selectedRegionSegment) return `${selectedRegionSegment.region} chapter`;
     return 'Journey spotlight';
   }, [photoScope, selectedDate, selectedDayPhotoRows.length, selectedRegionSegment]);
+  const spotlightHeading = useMemo(() => {
+    if (photoScope === 'selected_chapter' && selectedRegionSegment) {
+      return `${selectedRegionSegment.region} · Chapter ${selectedChapterIndex + 1}`;
+    }
+    if (photoScope === 'full_trip') {
+      return 'Entire Journey · Memory Atlas';
+    }
+    return `${formatDateLabel(selectedDate)} · ${selectedDay.region}`;
+  }, [photoScope, selectedChapterIndex, selectedDate, selectedDay.region, selectedRegionSegment]);
+  const spotlightStoryline = useMemo(() => {
+    if (photoScope === 'selected_chapter' && selectedRegionSegment) {
+      return previewText(
+        `${momentDateRangeLabel(selectedRegionSegment.startDate, selectedRegionSegment.endDate)} · ${pluralize(
+          selectedSegmentDays.length,
+          'day',
+        )} · ${pluralize(selectedChapterMediaCount, 'media item')}. ${selectedDayStoryline}`,
+      );
+    }
+    if (photoScope === 'full_trip') {
+      return `Browse the whole archive with ${formatDateLabel(selectedDate)} pinned as the current memory page.`;
+    }
+    return selectedDayStorylinePreview;
+  }, [
+    photoScope,
+    selectedChapterMediaCount,
+    selectedDate,
+    selectedDayStoryline,
+    selectedDayStorylinePreview,
+    selectedRegionSegment,
+    selectedSegmentDays.length,
+  ]);
+  const spotlightMetaLabel =
+    photoScope === 'selected_chapter'
+      ? 'Chapter View'
+      : photoScope === 'full_trip'
+        ? 'Journey View'
+        : 'Memory Page';
   const activeSpotlightIndex = useMemo(() => {
     if (spotlightItems.length === 0) return 0;
     return ((heroMediaIndex % spotlightItems.length) + spotlightItems.length) % spotlightItems.length;
@@ -964,18 +1082,59 @@ export function App() {
     if (spotlightItems.length === 0) return null;
     return spotlightItems[activeSpotlightIndex];
   }, [activeSpotlightIndex, spotlightItems]);
+  const activeViewerItem = useMemo(() => {
+    if (!mediaViewer || mediaViewer.items.length === 0) return null;
+    const normalizedIndex = ((mediaViewer.index % mediaViewer.items.length) + mediaViewer.items.length) % mediaViewer.items.length;
+    return mediaViewer.items[normalizedIndex];
+  }, [mediaViewer]);
+  const spotlightIndexByLookupKey = useMemo(
+    () => new Map(spotlightItems.map((item, index) => [item.lookupKey, index])),
+    [spotlightItems],
+  );
+  const visibleMediaItems = useMemo(
+    () => momentRowsToSpotlightItems(visiblePhotoRows, tripPlan.days, selectedDay.region),
+    [selectedDay.region, tripPlan.days, visiblePhotoRows],
+  );
+  const visibleMediaIndexByLookupKey = useMemo(
+    () => new Map(visibleMediaItems.map((item, index) => [item.lookupKey, index])),
+    [visibleMediaItems],
+  );
   const heroDeckText = useMemo(() => {
     const routeStart = tripPlan.days[0]?.region || 'the departure gate';
     const routeEnd = tripPlan.days[tripPlan.days.length - 1]?.region || 'the final stop';
-    return `A keepsake from ${formatDateLabel(tripPlan.startDate)} to ${formatDateLabel(tripPlan.endDate)}: ${pluralize(
-      tripPlan.days.length,
-      'day',
-    )}, ${pluralize(regionSegments.length, 'chapter')}, and a route stretching from ${routeStart} to ${routeEnd}.`;
-  }, [regionSegments.length, tripPlan.days, tripPlan.endDate, tripPlan.startDate]);
+    return `${pluralize(tripPlan.days.length, 'day')}, ${pluralize(regionSegments.length, 'chapter')}, and ${pluralize(
+      totalMediaCount,
+      'saved media item',
+    )} from ${routeStart} to ${routeEnd}.`;
+  }, [regionSegments.length, totalMediaCount, tripPlan.days]);
 
   useEffect(() => {
-    setHeroMediaIndex(0);
-  }, [selectedDate, selectedRegionSegment?.id]);
+    lastActiveSpotlightKeyRef.current = activeSpotlightItem?.lookupKey ?? null;
+  }, [activeSpotlightItem]);
+
+  useEffect(() => {
+    mediaViewerRef.current = mediaViewer;
+  }, [mediaViewer]);
+
+  useEffect(() => {
+    mediaViewerRef.current = mediaViewer;
+  }, [mediaViewer]);
+
+  useEffect(() => {
+    if (spotlightItems.length === 0) {
+      setHeroMediaIndex(0);
+      return;
+    }
+
+    const activeKey = lastActiveSpotlightKeyRef.current;
+    if (!activeKey) {
+      setHeroMediaIndex(0);
+      return;
+    }
+
+    const nextIndex = spotlightItems.findIndex((item) => item.lookupKey === activeKey);
+    setHeroMediaIndex(nextIndex >= 0 ? nextIndex : 0);
+  }, [spotlightItems]);
 
   const mapStops = useMemo<MapStop[]>(() => {
     if (activeMapScope === 'day') {
@@ -992,7 +1151,9 @@ export function App() {
         }));
     }
 
-    return tripPlan.days
+    const scopedDays = activeMapScope === 'chapter' ? selectedSegmentDays : tripPlan.days;
+
+    return scopedDays
       .map((day) => {
         const firstWithCoords = getActiveItems(day).find(
           (item) => Number.isFinite(item.lat) && Number.isFinite(item.lng),
@@ -1009,7 +1170,7 @@ export function App() {
         } satisfies MapStop;
       })
       .filter((stop): stop is MapStop => Boolean(stop));
-  }, [activeMapScope, selectedItems, selectedDay.date, selectedDay.region, tripPlan.days]);
+  }, [activeMapScope, selectedItems, selectedDay.date, selectedDay.region, selectedSegmentDays, tripPlan.days]);
 
   function postAlert(level: UiAlert['level'], message: string, scope?: string) {
     setUiAlert({ level, message, scope });
@@ -1022,7 +1183,7 @@ export function App() {
     if (!node) return;
 
     window.requestAnimationFrame(() => {
-      node.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      node.scrollIntoView?.({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
     });
   }
 
@@ -1051,7 +1212,50 @@ export function App() {
   function selectRegion(segment: RegionSegment) {
     selectDate(segment.startDate, {
       status: `Jumped to ${segment.region}.`,
+      mapScope: 'chapter',
       photoScope: 'selected_chapter',
+    });
+  }
+
+  function focusSpotlightItem(item: SpotlightMediaItem, options: SelectDateOptions = {}) {
+    const itemIndex = spotlightIndexByLookupKey.get(item.lookupKey);
+    if (typeof itemIndex === 'number') {
+      setHeroMediaIndex(itemIndex);
+    }
+
+    selectDate(item.date, {
+      status: `Focused on ${formatDateLabel(item.date)} in ${item.region}.`,
+      mapScope: 'day',
+      photoScope,
+      scrollTarget: 'none',
+      ...options,
+    });
+  }
+
+  function openMediaViewer(items: SpotlightMediaItem[], index: number, label: string) {
+    if (items.length === 0) return;
+    viewerLastFocusedElementRef.current =
+      typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setMediaViewer({
+      items,
+      index,
+      label,
+    });
+  }
+
+  function closeMediaViewer() {
+    setMediaViewer(null);
+  }
+
+  function shiftMediaViewer(delta: number) {
+    setMediaViewer((current) => {
+      if (!current || current.items.length === 0) return current;
+      return {
+        ...current,
+        index: ((current.index + delta) % current.items.length + current.items.length) % current.items.length,
+      };
     });
   }
 
@@ -1082,9 +1286,118 @@ export function App() {
     if (!mapRef.current) return;
 
     mapRef.current.setView([stop.lat, stop.lng], 11, {
-      animate: true,
+      animate: !prefersReducedMotion(),
     });
   }
+
+  useEffect(() => {
+    if (!chapterMenuOpen || typeof window === 'undefined') return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (chapterMenuRef.current?.contains(target) || chapterMenuButtonRef.current?.contains(target)) return;
+      setChapterMenuOpen(false);
+      setStatusMessage('Closed chapter list.');
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setChapterMenuOpen(false);
+      setStatusMessage('Closed chapter list.');
+      window.requestAnimationFrame(() => {
+        chapterMenuButtonRef.current?.focus();
+      });
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [chapterMenuOpen]);
+
+  function handleSpotlightKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (spotlightItems.length <= 1) return;
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setHeroMediaIndex((index) => index - 1);
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setHeroMediaIndex((index) => index + 1);
+    }
+  }
+
+  useEffect(() => {
+    if (!chapterMenuOpen) return;
+    window.requestAnimationFrame(() => {
+      chapterMenuCloseButtonRef.current?.focus();
+    });
+  }, [chapterMenuOpen]);
+
+  useEffect(() => {
+    const selectedDayButton = dayFocusButtonRefs.current[selectedDate];
+    if (!selectedDayButton || typeof selectedDayButton.scrollIntoView !== 'function') return;
+
+    selectedDayButton.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }, [selectedDate]);
+
+  useEffect(() => {
+    const activeThumb = activeSpotlightItem ? spotlightThumbRefs.current[activeSpotlightItem.lookupKey] : null;
+    if (!activeThumb || typeof activeThumb.scrollIntoView !== 'function') return;
+
+    activeThumb.scrollIntoView({
+      behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+      block: 'nearest',
+      inline: 'center',
+    });
+  }, [activeSpotlightItem]);
+
+  useEffect(() => {
+    if (!mediaViewer || typeof window === 'undefined') return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.requestAnimationFrame(() => {
+      viewerCloseButtonRef.current?.focus();
+    });
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMediaViewer();
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        shiftMediaViewer(-1);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        shiftMediaViewer(1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+      viewerLastFocusedElementRef.current?.focus();
+    };
+  }, [mediaViewer !== null]);
+
+  useEffect(() => {
+    if (!mediaViewerRef.current) return;
+    const current = mediaViewerRef.current;
+    const normalizedIndex = ((current.index % current.items.length) + current.items.length) % current.items.length;
+    setStatusMessage(`Viewing ${normalizedIndex + 1} of ${current.items.length} in ${current.label}.`);
+  }, [mediaViewer?.index, mediaViewer?.items.length, mediaViewer?.label]);
 
   useEffect(() => {
     saveTripPlanState(tripPlan);
@@ -1349,13 +1662,16 @@ export function App() {
     const bounds = L.latLngBounds([]);
     const todayRegionBounds = L.latLngBounds([]);
     const selectedDayBounds = L.latLngBounds([]);
+    const selectedChapterBounds = L.latLngBounds([]);
     const selectedDayCoords: [number, number][] = [];
+    const selectedChapterCoords: [number, number][] = [];
 
     for (const day of tripPlan.days) {
       const items = getActiveItems(day);
       const color = regionColor(day.region);
       const fullTripLineColor = seasonalTripLineColor(day.date, tripPlan.startDate, tripPlan.endDate);
       const isSelectedDate = day.date === selectedDate;
+      const isInSelectedChapter = selectedRegionSegment ? segmentContainsDate(selectedRegionSegment, day.date) : false;
       const isTodayDate = todayDate ? day.date === todayDate : false;
       const hasPhotos = dayHasPhotos(day);
 
@@ -1401,6 +1717,10 @@ export function App() {
           selectedDayBounds.extend(coord);
           selectedDayCoords.push(coord);
         }
+        if (isInSelectedChapter) {
+          selectedChapterBounds.extend(coord);
+          selectedChapterCoords.push(coord);
+        }
       });
 
       photoPoints
@@ -1435,6 +1755,10 @@ export function App() {
         if (day.region === todayRegion) {
           todayRegionBounds.extend([point.lat, point.lng]);
         }
+        if (isInSelectedChapter) {
+          selectedChapterBounds.extend([point.lat, point.lng]);
+          selectedChapterCoords.push([point.lat, point.lng]);
+        }
       });
 
       if (isSelectedDate) {
@@ -1453,6 +1777,14 @@ export function App() {
               color: fullTripLineColor,
               weight: isSelectedDate || isTodayDate ? 3.2 : 2,
               opacity: isSelectedDate || isTodayDate ? 0.9 : 0.33,
+            }),
+          );
+        } else if (activeMapScope === 'chapter' && isInSelectedChapter) {
+          markerLayerRef.current.addLayer(
+            L.polyline(coords, {
+              color,
+              weight: isSelectedDate ? 3.3 : 2.6,
+              opacity: isSelectedDate ? 0.92 : 0.66,
             }),
           );
         } else if (isSelectedDate) {
@@ -1483,7 +1815,12 @@ export function App() {
         hasAppliedInitialRegionLockRef.current = true;
         lastViewportFitKeyRef.current = 'initial';
       } else {
-        const fitKey = activeMapScope === 'day' ? `day:${selectedDate}` : 'trip';
+        const fitKey =
+          activeMapScope === 'day'
+            ? `day:${selectedDate}`
+            : activeMapScope === 'chapter'
+              ? `chapter:${selectedRegionSegment?.id || selectedDate}`
+              : 'trip';
         if (lastViewportFitKeyRef.current !== fitKey) {
           mapRef.current.stop();
 
@@ -1492,18 +1829,38 @@ export function App() {
               const [lat, lng] = selectedDayCoords[0];
               const currentZoom = mapRef.current.getZoom();
               mapRef.current.flyTo([lat, lng], Math.max(10, Math.min(13, currentZoom)), {
-                animate: true,
-                duration: 0.75,
+                animate: !prefersReducedMotion(),
+                duration: prefersReducedMotion() ? 0 : 0.75,
               });
             } else {
               mapRef.current.flyToBounds(selectedDayBounds.pad(0.36), {
+                animate: !prefersReducedMotion(),
                 padding: [20, 20],
                 maxZoom: 12,
               });
             }
             setStatusMessage(`Map focused on ${formatDateLabel(selectedDate)} in ${selectedDay.region}.`);
+          } else if (activeMapScope === 'chapter' && selectedChapterBounds.isValid()) {
+            if (selectedChapterCoords.length === 1) {
+              const [lat, lng] = selectedChapterCoords[0];
+              const currentZoom = mapRef.current.getZoom();
+              mapRef.current.flyTo([lat, lng], Math.max(8, Math.min(11, currentZoom)), {
+                animate: !prefersReducedMotion(),
+                duration: prefersReducedMotion() ? 0 : 0.75,
+              });
+            } else {
+              mapRef.current.flyToBounds(selectedChapterBounds.pad(0.28), {
+                animate: !prefersReducedMotion(),
+                padding: [20, 20],
+                maxZoom: 8,
+              });
+            }
+            setStatusMessage(
+              `Map framed on the ${selectedRegionSegment?.region || 'selected chapter'} chapter.`,
+            );
           } else {
             mapRef.current.flyToBounds(bounds.pad(0.24), {
+              animate: !prefersReducedMotion(),
               padding: [20, 20],
               maxZoom: 5,
             });
@@ -1527,6 +1884,7 @@ export function App() {
     todayDate,
     todayRegion,
     tripPhase,
+    selectedRegionSegment,
   ]);
 
   function setDayViewMode(date: string, mode: ViewMode) {
@@ -1647,6 +2005,7 @@ export function App() {
               type="button"
               className={photoScope === 'selected_day' ? 'active' : ''}
               onClick={() => setPhotoScope('selected_day')}
+              aria-pressed={photoScope === 'selected_day'}
             >
               Memory Page ({selectedDayPhotoRows.length})
             </button>
@@ -1654,6 +2013,7 @@ export function App() {
               type="button"
               className={photoScope === 'selected_chapter' ? 'active' : ''}
               onClick={() => setPhotoScope('selected_chapter')}
+              aria-pressed={photoScope === 'selected_chapter'}
             >
               Chapter ({selectedChapterPhotoRows.length})
             </button>
@@ -1661,6 +2021,7 @@ export function App() {
               type="button"
               className={photoScope === 'full_trip' ? 'active' : ''}
               onClick={() => setPhotoScope('full_trip')}
+              aria-pressed={photoScope === 'full_trip'}
             >
               Entire Journey ({fullTripPhotoRows.length})
             </button>
@@ -1668,6 +2029,66 @@ export function App() {
         </div>
         {rows.length === 0 ? (
           <p className="hint">No archived media yet.</p>
+        ) : photoScope === 'selected_chapter' ? (
+          <div className="chapter-gallery-shell" data-testid="chapter-gallery">
+            {chapterGalleryDays.map((day) => (
+              <section
+                key={day.date}
+                className={`chapter-gallery-day ${day.date === selectedDate ? 'is-active' : ''}`}
+              >
+                <div className="chapter-gallery-day-header">
+                  <div>
+                    <p className="chapter-gallery-kicker">Memory Page</p>
+                    <h3>{formatDateLabel(day.date)}</h3>
+                    <p className="chapter-gallery-day-meta">
+                      {day.region} · {pluralize(day.mediaItems.length, 'media item')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-btn"
+                    onClick={() =>
+                      selectDate(day.date, {
+                        status: `Opened ${formatDateLabel(day.date)}.`,
+                        photoScope: 'selected_day',
+                        scrollTarget: 'map',
+                      })
+                    }
+                  >
+                    Open day
+                  </button>
+                </div>
+                <p className="chapter-gallery-summary">{day.summary}</p>
+                <div className="chapter-gallery-grid">
+                  {day.mediaItems.map((item) => {
+                    const isActive = activeSpotlightItem?.lookupKey === item.lookupKey;
+
+                    return (
+                      <button
+                        key={item.lookupKey}
+                        type="button"
+                        className={`chapter-gallery-thumb ${isActive ? 'is-active' : ''}`}
+                        onClick={() => focusSpotlightItem(item, { photoScope: 'selected_chapter' })}
+                        aria-pressed={isActive}
+                      >
+                        <span className="chapter-gallery-thumb-media">
+                          <img
+                            src={resolvePublicAssetUrl(item.src, import.meta.env.BASE_URL)}
+                            alt={item.alt}
+                            loading="lazy"
+                          />
+                        </span>
+                        <span className="chapter-gallery-thumb-copy">
+                          <strong>{item.kind === 'video' ? 'Video still' : 'Photo'}</strong>
+                          <small>{item.caption || `${formatDateLabel(item.date)} · ${item.region}`}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
         ) : (
           <ul className="actual-moment-list">
             {rows.map((row) => (
@@ -1689,22 +2110,40 @@ export function App() {
                   <div className="actual-photo-strip" data-testid="actual-photo-strip">
                     {row.moment.photos.map((photo) => {
                       const displayCaption = mediaDisplayCaption(photo.caption, photo.alt);
+                      const itemIndex = visibleMediaIndexByLookupKey.get(`${row.date}:${photo.id}`) ?? 0;
 
                       return (
                         <figure key={photo.id} className="actual-photo-card">
-                          <div className="actual-photo-media">
-                            <img
-                              src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
-                              alt={photo.alt}
-                              loading="lazy"
-                            />
+                          <button
+                            type="button"
+                            className="actual-photo-launch"
+                            onClick={() => openMediaViewer(visibleMediaItems, itemIndex, mediaContext)}
+                            aria-label={`Open photo from ${formatDateLabel(row.date)} in the viewer`}
+                          >
+                            <div className="actual-photo-media">
+                              <img
+                                src={resolvePublicAssetUrl(canonicalPhotoSrc(photo.src), import.meta.env.BASE_URL)}
+                                alt={photo.alt}
+                                loading="lazy"
+                              />
+                            </div>
+                          </button>
+                          <div className="actual-photo-caption-row">
+                            {displayCaption ? <figcaption>{displayCaption}</figcaption> : <span className="actual-photo-caption-spacer" />}
+                            <button
+                              type="button"
+                              className="actual-photo-expand secondary-btn"
+                              onClick={() => openMediaViewer(visibleMediaItems, itemIndex, mediaContext)}
+                            >
+                              View
+                            </button>
                           </div>
-                          {displayCaption ? <figcaption>{displayCaption}</figcaption> : null}
                         </figure>
                       );
                     })}
                     {(row.moment.videos || []).map((video) => {
                       const displayCaption = mediaDisplayCaption(video.caption, undefined);
+                      const itemIndex = visibleMediaIndexByLookupKey.get(`${row.date}:${video.id}`) ?? 0;
 
                       return (
                         <figure key={video.id} className="actual-photo-card">
@@ -1718,7 +2157,16 @@ export function App() {
                               <source src={resolvePublicAssetUrl(video.src, import.meta.env.BASE_URL)} />
                             </video>
                           </div>
-                          {displayCaption ? <figcaption>{displayCaption}</figcaption> : null}
+                          <div className="actual-photo-caption-row">
+                            {displayCaption ? <figcaption>{displayCaption}</figcaption> : <span className="actual-photo-caption-spacer" />}
+                            <button
+                              type="button"
+                              className="actual-photo-expand secondary-btn"
+                              onClick={() => openMediaViewer(visibleMediaItems, itemIndex, mediaContext)}
+                            >
+                              View
+                            </button>
+                          </div>
                         </figure>
                       );
                     })}
@@ -1748,7 +2196,7 @@ export function App() {
             </p>
           </div>
           <div className="map-scope-toggle" role="group" aria-label="Map scope">
-            {(['day', 'trip'] as MapScope[]).map((scope) => (
+            {(['day', 'chapter', 'trip'] as MapScope[]).map((scope) => (
               <button
                 key={scope}
                 type="button"
@@ -1764,11 +2212,13 @@ export function App() {
         <p className="map-meta">
           {activeMapScope === 'trip'
             ? 'Showing the whole route so the journey reads as one continuous memory.'
-            : `Focused on the memory page for ${formatDateLabel(selectedDate)} in ${selectedDay.region}.`}
+            : activeMapScope === 'chapter'
+              ? `Framed on ${selectedRegionSegment?.region || selectedDay.region} so the chapter reads as a single arc.`
+              : `Focused on the memory page for ${formatDateLabel(selectedDate)} in ${selectedDay.region}.`}
         </p>
 
         <div className="map-status" role="status" aria-live="polite">
-          {mapStatus === 'initializing' ? <span>Loading map...</span> : null}
+          {mapStatus === 'initializing' ? <span>Loading map…</span> : null}
         </div>
 
         {mapStatus === 'error' ? (
@@ -1841,11 +2291,13 @@ export function App() {
             </div>
             <div className="hero-stat hero-stat-action-card">
               <button
+                ref={chapterMenuButtonRef}
                 type="button"
                 className="hero-stat-button"
                 onClick={() => setChapterMenuOpen((open) => !open)}
                 aria-expanded={chapterMenuOpen}
                 aria-controls="hero-chapter-menu"
+                aria-haspopup="dialog"
               >
                 <dt>Chapters</dt>
                 <dd>{regionSegments.length}</dd>
@@ -1862,33 +2314,58 @@ export function App() {
             </div>
           </dl>
           {chapterMenuOpen ? (
-            <section className="hero-chapter-menu" id="hero-chapter-menu" data-testid="chapter-menu">
-              <div className="hero-chapter-menu-header">
-                <div>
-                  <strong>Journey chapters</strong>
-                  <p>Open a place, then use the date rail below to move day by day across {pluralize(totalStopCount, 'planned stop')}.</p>
-                </div>
-                <button type="button" className="secondary-btn" onClick={() => setChapterMenuOpen(false)}>
-                  Close
-                </button>
-              </div>
-              <div className="chapter-strip hero-chapter-strip">
-                {regionSegments.map((segment, index) => (
+            <>
+              <button
+                type="button"
+                className="hero-chapter-backdrop"
+                data-testid="chapter-menu-backdrop"
+                aria-label="Close chapter list"
+                onClick={() => setChapterMenuOpen(false)}
+              />
+              <section
+                ref={chapterMenuRef}
+                className="hero-chapter-menu"
+                id="hero-chapter-menu"
+                data-testid="chapter-menu"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Journey chapters"
+              >
+                <div className="hero-chapter-menu-header">
+                  <div>
+                    <strong>Journey chapters</strong>
+                    <p>
+                      Open a place, then use the date rail below to move day by day across {pluralize(totalStopCount, 'planned stop')}.
+                    </p>
+                  </div>
                   <button
-                    key={segment.id}
+                    ref={chapterMenuCloseButtonRef}
                     type="button"
-                    className={`chapter-button ${selectedRegionSegment?.id === segment.id ? 'active' : ''}`}
-                    onClick={() => selectRegion(segment)}
+                    className="secondary-btn"
+                    onClick={() => setChapterMenuOpen(false)}
                   >
-                    <span className="chapter-kicker">Chapter {index + 1}</span>
-                    <strong>{segment.region}</strong>
-                    <small>
-                      {momentDateRangeLabel(segment.startDate, segment.endDate)} · {pluralize(segment.days, 'day')}
-                    </small>
+                    Close
                   </button>
-                ))}
-              </div>
-            </section>
+                </div>
+                <div className="chapter-strip hero-chapter-strip">
+                  {regionSegments.map((segment, index) => (
+                    <button
+                      key={segment.id}
+                      type="button"
+                      className={`chapter-button ${selectedRegionSegment?.id === segment.id ? 'active' : ''}`}
+                      onClick={() => selectRegion(segment)}
+                      aria-pressed={selectedRegionSegment?.id === segment.id}
+                    >
+                      <span className="chapter-kicker">Chapter {index + 1}</span>
+                      <strong>{segment.region}</strong>
+                      <small>
+                        {momentDateRangeLabel(segment.startDate, segment.endDate)} · {pluralize(segment.days, 'day')}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </>
           ) : null}
 
           <div className="hero-action-row">
@@ -1912,19 +2389,22 @@ export function App() {
           <section className="hero-spotlight" aria-label="Selected memory spotlight">
             <div className="hero-spotlight-meta">
               <span className="pill">Chapter {selectedChapterIndex + 1}</span>
-              <span className="pill">Day {selectedDayIndex + 1}</span>
-              <span className="pill">{pluralize(selectedDayMediaCount, 'media item')}</span>
+              <span className="pill">{photoScope === 'selected_chapter' ? pluralize(selectedSegmentDays.length, 'day') : `Day ${selectedDayIndex + 1}`}</span>
+              <span className="pill">{pluralize(spotlightMediaCount, 'media item')}</span>
+              <span className="pill">{spotlightMetaLabel}</span>
             </div>
-            <h2>
-              {formatDateLabel(selectedDate)} · {selectedDay.region}
-            </h2>
-            <p>{selectedDayStorylinePreview}</p>
+            <h2>{spotlightHeading}</h2>
+            <p>{spotlightStoryline}</p>
           </section>
         </div>
 
         <div className="hero-visual-shell" aria-hidden={activeSpotlightItem ? undefined : true}>
           {activeSpotlightItem ? (
-            <div className="hero-carousel">
+            <div
+              className="hero-carousel"
+              tabIndex={spotlightItems.length > 1 ? 0 : -1}
+              onKeyDown={handleSpotlightKeyDown}
+            >
               <div className="hero-carousel-toolbar">
                 <span className="hero-carousel-counter">
                   {spotlightScopeLabel} · {activeSpotlightIndex + 1} / {spotlightItems.length}
@@ -1950,19 +2430,55 @@ export function App() {
                   </div>
                 ) : null}
               </div>
-              <figure className="hero-visual">
+              <button
+                type="button"
+                className="hero-visual-launch"
+                data-testid="hero-visual-launch"
+                onClick={() => openMediaViewer(spotlightItems, activeSpotlightIndex, spotlightScopeLabel)}
+                aria-label={`Open ${spotlightScopeLabel} in the viewer`}
+              >
+                <figure className="hero-visual">
                 <img
                   src={resolvePublicAssetUrl(activeSpotlightItem.src, import.meta.env.BASE_URL)}
                   alt={activeSpotlightItem.alt}
                 />
-                <figcaption>
-                  <strong>{activeSpotlightItem.kind === 'video' ? 'Video still' : 'Photo'}</strong>
-                  <span>
-                    {activeSpotlightItem.caption ||
-                      `${formatDateLabel(activeSpotlightItem.date)} · ${activeSpotlightItem.region}`}
-                  </span>
-                </figcaption>
-              </figure>
+                </figure>
+              </button>
+              <div className="hero-visual-caption">
+                <strong>{activeSpotlightItem.kind === 'video' ? 'Video still' : 'Photo'}</strong>
+                <span>
+                  {activeSpotlightItem.caption ||
+                    `${formatDateLabel(activeSpotlightItem.date)} · ${activeSpotlightItem.region}`}
+                </span>
+              </div>
+              {spotlightItems.length > 1 ? (
+                <div className="hero-thumbnail-rail" data-testid="hero-thumbnail-rail" aria-label="Spotlight media thumbnails">
+                  {spotlightItems.map((item, index) => {
+                    const isActive = index === activeSpotlightIndex;
+
+                    return (
+                      <button
+                        key={item.lookupKey}
+                        ref={(node) => {
+                          spotlightThumbRefs.current[item.lookupKey] = node;
+                        }}
+                        type="button"
+                        className={`hero-thumbnail ${isActive ? 'is-active' : ''}`}
+                        onClick={() => focusSpotlightItem(item, { photoScope, scrollTarget: 'none' })}
+                        aria-pressed={isActive}
+                        aria-label={`Show ${item.kind === 'video' ? 'video still' : 'photo'} ${index + 1}`}
+                      >
+                        <img
+                          src={resolvePublicAssetUrl(item.src, import.meta.env.BASE_URL)}
+                          alt=""
+                          loading="lazy"
+                        />
+                        <span>{formatDateLabel(item.date)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="hero-placeholder">
@@ -2021,8 +2537,13 @@ export function App() {
                   <button
                     key={day.date}
                     type="button"
+                    ref={(node) => {
+                      dayFocusButtonRefs.current[day.date] = node;
+                    }}
                     className={`day-focus-button ${day.date === selectedDate ? 'active' : ''}`}
                     onClick={() => selectDate(day.date, { status: `Focused on ${formatDateLabel(day.date)}.` })}
+                    aria-current={day.date === selectedDate ? 'date' : undefined}
+                    aria-pressed={day.date === selectedDate}
                   >
                     <span className="day-focus-date">{formatDateLabel(day.date)}</span>
                     <small>{day.region}</small>
@@ -2123,6 +2644,87 @@ export function App() {
           </div>
         </section>
       </section>
+
+      {mediaViewer && activeViewerItem ? (
+        <section className="media-viewer-backdrop" role="presentation" onClick={closeMediaViewer}>
+          <div
+            className="media-viewer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${mediaViewer.label} viewer`}
+            data-testid="media-viewer"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="media-viewer-toolbar">
+              <div className="media-viewer-kicker">
+                <span>{mediaViewer.label}</span>
+                <strong>
+                  {((mediaViewer.index % mediaViewer.items.length) + mediaViewer.items.length) % mediaViewer.items.length + 1} /{' '}
+                  {mediaViewer.items.length}
+                </strong>
+              </div>
+              <button
+                ref={viewerCloseButtonRef}
+                type="button"
+                className="secondary-btn media-viewer-close"
+                onClick={closeMediaViewer}
+              >
+                Close
+              </button>
+            </div>
+            <div className="media-viewer-stage">
+              <button
+                type="button"
+                className="media-viewer-nav"
+                onClick={() => shiftMediaViewer(-1)}
+                aria-label="Previous media item"
+              >
+                ‹
+              </button>
+              <figure className="media-viewer-frame">
+                <div className="media-viewer-media">
+                  {activeViewerItem.kind === 'video' ? (
+                    <video
+                      controls
+                      preload="metadata"
+                      playsInline
+                      poster={activeViewerItem.poster ? resolvePublicAssetUrl(activeViewerItem.poster, import.meta.env.BASE_URL) : undefined}
+                    >
+                      <source
+                        src={resolvePublicAssetUrl(activeViewerItem.assetSrc || activeViewerItem.src, import.meta.env.BASE_URL)}
+                      />
+                    </video>
+                  ) : (
+                    <img
+                      src={resolvePublicAssetUrl(activeViewerItem.assetSrc || activeViewerItem.src, import.meta.env.BASE_URL)}
+                      alt={activeViewerItem.alt}
+                    />
+                  )}
+                </div>
+                <figcaption className="media-viewer-caption">
+                  <div className="media-viewer-meta">
+                    <span className="pill">{formatDateLabel(activeViewerItem.date)}</span>
+                    <span className="pill">{activeViewerItem.region}</span>
+                    <span className="pill">{activeViewerItem.kind === 'video' ? 'Video' : 'Photo'}</span>
+                  </div>
+                  <p>
+                    {activeViewerItem.caption ||
+                      `${formatDateLabel(activeViewerItem.date)} · ${activeViewerItem.region}`}
+                  </p>
+                </figcaption>
+              </figure>
+              <button
+                type="button"
+                className="media-viewer-nav"
+                onClick={() => shiftMediaViewer(1)}
+                aria-label="Next media item"
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <footer className="status-row">
         <span>{statusMessage}</span>
