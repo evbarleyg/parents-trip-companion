@@ -161,25 +161,16 @@ describe('App one-page workspace', () => {
     expect(getTestElement(container, 'hero-thumbnail-rail')).toBeTruthy();
 
     await act(async () => {
-      (getTestElement(container, 'chapter-menu-backdrop') as HTMLButtonElement).click();
-      await flushEffects();
-    });
-
-    await act(async () => {
-      (container.querySelector('.hero-thumbnail') as HTMLButtonElement | null)?.click();
-      await flushEffects();
-    });
-
-    await act(async () => {
-      const chapterScopeButton = Array.from(container.querySelectorAll('.media-scope-toggle button')).find((button) =>
-        button.textContent?.includes('Chapter'),
-      ) as HTMLButtonElement | undefined;
-      chapterScopeButton?.click();
+      const chapterChoice = findMediaRichChapter(getTestElement(container, 'chapter-menu'));
+      chapterChoice?.click();
       await flushEffects();
     });
 
     expect(
       (container.querySelector('.media-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
+    ).toContain('Chapter');
+    expect(
+      (container.querySelector('.map-scope-toggle button.active') as HTMLButtonElement | null)?.textContent,
     ).toContain('Chapter');
     expect(container.querySelector('.trip-media-context')?.textContent).toContain('across');
     expect(getTestElement(container, 'chapter-gallery')).toBeTruthy();
@@ -209,20 +200,8 @@ describe('App one-page workspace', () => {
     });
 
     await act(async () => {
-      (getTestElement(container, 'chapter-menu-backdrop') as HTMLButtonElement).click();
-      await flushEffects();
-    });
-
-    await act(async () => {
-      (container.querySelector('.hero-thumbnail') as HTMLButtonElement | null)?.click();
-      await flushEffects();
-    });
-
-    await act(async () => {
-      const chapterScopeButton = Array.from(container.querySelectorAll('.media-scope-toggle button')).find((button) =>
-        button.textContent?.includes('Chapter'),
-      ) as HTMLButtonElement | undefined;
-      chapterScopeButton?.click();
+      const chapterChoice = findMediaRichChapter(getTestElement(container, 'chapter-menu'));
+      chapterChoice?.click();
       await flushEffects();
     });
 
