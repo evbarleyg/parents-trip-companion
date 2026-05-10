@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(pwd)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(rg *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(npm run dev)",
+      "Bash(npm run dev:api)",
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test)",
+      "Bash(npm run build)",
+      "Bash(npm run guardrails:check)",
+      "Bash(npm run guardrails:sync)",
+      "Bash(npm run guardrails:prepush)",
+      "Bash(node --check *)"
+    ],
+    "ask": [
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh *)",
+      "Bash(npm install *)",
+      "Bash(npm ci)",
+      "Bash(npm run guardrails:install-hooks)",
+      "Bash(bash ./scripts/install-git-hooks.sh)",
+      "Bash(bash ./scripts/guardrails.sh *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(rm *)",
+      "Bash(open *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./content/photo-inbox/**)",
+      "Read(./content/imessage transcripst/**)",
+      "Read(./content/Instabul Pics/**)",
+      "Read(./content/dad-inbox/**)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout -- *)",
+      "Bash(git clean *)",
+      "Bash(rm -rf *)",
+      "Bash(rm -fr *)"
+    ]
+  }
+}
